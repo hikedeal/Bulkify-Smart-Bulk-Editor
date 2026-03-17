@@ -1,0 +1,19 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "0d4ef57f7dbd01aab7960d39459af0c2"
+name = "Bulkify: Smart Bulk Editor"
+application_url = "https://your-app-url.com"
+embedded = true
+
+[build]
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2026-04"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_locations,read_markets,write_inventory,write_products,write_markets"
+
+[auth]
+redirect_urls = [ "https://example.com/auth/callback", "https://example.com/auth/shopify/callback", "https://example.com/api/auth/callback" ]

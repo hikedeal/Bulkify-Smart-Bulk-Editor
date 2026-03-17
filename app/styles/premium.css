@@ -1,0 +1,215 @@
+/* Premium Dashboard Aesthetics */
+
+:root {
+    --p-color-bg-surface-secondary: var(--p-color-bg-surface-secondary);
+    --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+    --secondary-gradient: linear-gradient(135deg, #6366f1 0%, #1e293b 100%);
+}
+
+/* Page Background & Scrollbar */
+body {
+    background: linear-gradient(135deg, #f0f4f8 0%, #f6f8fa 100%);
+}
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+    border: 2px solid #f1f5f9;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+::selection {
+    background: rgba(79, 70, 229, 0.1);
+    color: #4f46e5;
+}
+
+/* Hero Section */
+.premium-hero {
+    background: var(--primary-gradient);
+    border-radius: var(--p-border-radius-600);
+    padding: clamp(2rem, 5vw, 3.5rem) clamp(1.5rem, 4vw, 3rem);
+    color: var(--p-color-text-brand-on-primary);
+    box-shadow: var(--p-shadow-500);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: var(--p-space-800);
+}
+
+.premium-hero-mini {
+    background: var(--primary-gradient);
+    border-radius: 20px;
+    padding: 44px 48px;
+    color: white;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+/* Glassmorphism Elements for Hero */
+.glass-element {
+    position: absolute;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 70%);
+    border-radius: 50%;
+    filter: blur(40px);
+    z-index: 0;
+}
+
+/* Action Cards */
+.action-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    background: white;
+    padding: 24px;
+    border-radius: 20px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+    cursor: pointer;
+}
+
+.action-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+    border-color: #6366f1 !important;
+}
+
+.action-card.locked-feature {
+    cursor: default;
+    opacity: 0.85;
+    background: #fafafa !important;
+}
+
+.action-card.locked-feature:hover {
+    border-color: #f87171 !important;
+    background: #fffafa !important;
+    cursor: pointer;
+}
+
+/* Stat/Metric Cards */
+.stat-card {
+    transition: all 0.3s ease !important;
+    background: white !important;
+    border-radius: 20px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-card:hover {
+    background: var(--p-color-bg-surface-hover) !important;
+    transform: scale(1.02);
+    border-color: var(--p-color-border-hover) !important;
+}
+
+.stat-card-static {
+    background: white !important;
+    border-radius: 20px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-card-static>div {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-card-static .Polaris-IndexTable__TableRow:hover,
+.stat-card-static .Polaris-IndexTable__TableRow--hovered,
+.stat-card-static tr:hover,
+.stat-card-static td:hover {
+    background-color: transparent !important;
+    background: transparent !important;
+}
+
+/* Fix for sticky header overlap in Preview Table */
+.stat-card-static .Polaris-IndexTable-Header,
+.stat-card-static .Polaris-IndexTable__HeaderWrapper,
+.stat-card-static thead {
+    background: white !important;
+    z-index: 30 !important;
+    position: sticky !important;
+    top: 0 !important;
+}
+
+.stat-card-static .Polaris-IndexTable__Table th {
+    background: white !important;
+    border-bottom: 1px solid #e1e3e5 !important;
+}
+
+.stat-card-static .Polaris-IndexTable__Table {
+    border-collapse: separate !important;
+}
+
+/* Polaris Card Enhancements */
+.Polaris-Card {
+    border-radius: 16px !important;
+    border: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Pro Tip / Info Card */
+.pro-tip-card {
+    background: var(--secondary-gradient);
+    border-radius: 20px;
+    padding: 32px 24px;
+    color: white;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Button Refinement */
+.Polaris-Button--variantPrimary {
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+
+.Polaris-Button--variantPrimary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.premium-button-secondary {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: white !important;
+    border-radius: 12px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    backdrop-filter: blur(12px);
+    height: 40px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 24px !important;
+    user-select: none;
+}
+
+.premium-button-secondary:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.4) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+}
+
+.premium-button-secondary:active {
+    transform: translateY(0);
+}

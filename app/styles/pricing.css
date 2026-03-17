@@ -1,0 +1,312 @@
+/* RESET & Shopify Polaris Best Practices */
+:root {
+    --pricing-primary: #4f46e5;
+    --pricing-secondary: #7c3aed;
+    --pricing-accent: #db2777;
+    --pricing-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #db2777 100%);
+    --pricing-gradient-hover: linear-gradient(135deg, #4338ca 0%, #6d28d9 50%, #be185d 100%);
+}
+
+/* Base resets for embedded apps */
+body,
+html {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    /* Prevent horizontal scroll */
+    width: 100%;
+}
+
+/* Main Hero Section */
+.premium-hero {
+    position: relative;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 40%, #d946ef 100%);
+    color: white !important;
+    border-radius: 20px;
+    padding: 64px 32px;
+    margin: 0 auto 24px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+}
+
+.premium-hero h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem) !important;
+    font-weight: 800 !important;
+    margin-bottom: 20px !important;
+    color: white !important;
+    line-height: 1.1 !important;
+    letter-spacing: -0.02em !important;
+}
+
+.premium-hero p {
+    color: #e2e8f0 !important;
+    font-size: clamp(1rem, 2vw, 1.1rem) !important;
+    max-width: 700px;
+    margin: 0 auto 32px;
+    line-height: 1.6;
+}
+
+/* Toggle Switch Group */
+.pricing-toggle-container {
+    display: flex;
+    justify-self: center;
+    width: fit-content;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    padding: 5px;
+    border-radius: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    margin: 0 auto;
+}
+
+.pricing-toggle-btn {
+    background: transparent;
+    border: none;
+    color: #cbd5e1;
+    padding: 10px 24px;
+    border-radius: 100px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pricing-toggle-btn.active {
+    background: white;
+    color: #4f46e5;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.save-badge {
+    position: absolute;
+    top: -12px;
+    right: -20px;
+    background: var(--pricing-accent);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 20px;
+    transform: rotate(8deg);
+    box-shadow: 0 4px 8px rgba(219, 39, 119, 0.3);
+}
+
+/* Pricing Grid */
+.pricing-cards-wrapper {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 24px;
+    margin: 0 auto 64px;
+    width: 100%;
+    padding: 0 16px;
+    box-sizing: border-box;
+}
+
+.pricing-card {
+    background: white;
+    border-radius: 20px;
+    padding: 32px;
+    border: 1px solid #f1f5f9;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.pricing-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.pricing-card.pro {
+    border: 2px solid #4f46e5;
+    position: relative;
+}
+
+.most-popular-badge {
+    position: absolute;
+    top: -12px;
+    right: 32px;
+    background: var(--pricing-gradient);
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 4px 16px;
+    border-radius: 100px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Card Content Styling */
+.plan-name {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin-bottom: 8px;
+}
+
+.plan-price {
+    margin: 16px 0;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.price-amount {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.price-period {
+    font-size: 0.95rem;
+    color: #64748b;
+}
+
+.price-original {
+    font-size: 0.95rem;
+    color: #94a3b8;
+    text-decoration: line-through;
+    margin-left: 6px;
+}
+
+.plan-desc {
+    color: #475569;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    margin-bottom: 32px;
+    min-height: 48px;
+}
+
+/* Feature List */
+.features-list {
+    margin: 0 0 32px 0;
+    padding: 24px 0;
+    border-top: 1px solid #f1f5f9;
+    flex-grow: 1;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+    font-size: 0.95rem;
+    color: #334155;
+}
+
+.feature-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+/* Buttons */
+.plan-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 12px;
+    font-weight: 700;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: filter 0.2s;
+    border: none;
+    text-align: center;
+}
+
+.plan-btn.primary {
+    background: #4f46e5;
+    color: white;
+}
+
+.plan-btn.secondary {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+}
+
+.plan-btn:hover {
+    filter: brightness(1.1);
+}
+
+/* Discount UI */
+.discount-box {
+    margin-top: 24px;
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #f1f5f9;
+}
+
+.discount-input-group {
+    display: flex;
+    gap: 8px;
+}
+
+.discount-input {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.discount-apply-btn {
+    padding: 10px 16px;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* Responsive Overrides */
+@media (max-width: 768px) {
+    .premium-hero {
+        padding: 48px 24px;
+        width: 100%;
+        border-radius: 0;
+    }
+
+    .pricing-cards-wrapper {
+        grid-template-columns: 1fr;
+        padding: 0 16px;
+    }
+}
+
+/* Hero Background Shapes */
+.hero-background-shapes {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.hero-shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.4;
+}
+
+.hero-shape-1 {
+    top: -20%;
+    right: -10%;
+    width: 400px;
+    height: 400px;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.hero-shape-2 {
+    bottom: -10%;
+    left: -5%;
+    width: 300px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.1);
+}

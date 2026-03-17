@@ -1,0 +1,482 @@
+// Unified Database Schema
+// This file consolidates Session storage and Application data into a single PostgreSQL instance.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model ShopSettings {
+  shopDomain   String   @id @map("shop_domain")
+  shopName     String?  @map("shop_name")
+  contactEmail String?  @map("contact_email")
+  timezone     String   @default("UTC")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime @default(now()) @map("updated_at") @db.Timestamp(6)
+
+  @@map("shop_settings")
+}
+
+model PriceJob {
+  jobId             String    @id @default(dbgenerated("uuid_generate_v4()")) @map("job_id") @db.Uuid
+  shopDomain        String    @map("shop_domain")
+  name              String?   @default("Untitled Task")
+  status            String
+  startTime         DateTime? @map("start_time") @db.Timestamp(6)
+  endTime           DateTime? @map("end_time") @db.Timestamp(6)
+  completedAt       DateTime? @map("completed_at") @db.Timestamp(6)
+  configuration     Json?     @default("{}")
+  originalData      Json?     @default("{}") @map("original_data")
+  totalProducts     Int       @default(0) @map("total_products")
+  processedProducts Int       @default(0) @map("processed_products")
+  previewJson       Json?     @default("[]") @map("preview_json")
+  resultJson        Json?     @default("[]") @map("result_json")
+  error             String?
+  note              String?
+  scheduledRevertAt DateTime? @map("scheduled_revert_at") @db.Timestamp(6)
+  revertedAt        DateTime? @map("reverted_at") @db.Timestamp(6)
+  revertStatus      String?   @map("revert_status")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
+
+  // Relations
+  configPrice       JobConfigPrice[]
+  configInventory   JobConfigInventory[]
+  configCost         JobConfigCost[]
+  configTags        JobConfigTags[]
+  configStatus      JobConfigStatus[]
+  configMetafield   JobConfigMetafield[]
+  configWeight      JobConfigWeight[]
+  configVendor      JobConfigVendor[]
+  configProductType JobConfigProductType[]
+  configShipping    JobConfigShipping[]
+  configTaxable     JobConfigTaxable[]
+
+  @@index([shopDomain], map: "idx_price_jobs_shop_domain")
+  @@index([scheduledRevertAt], map: "idx_price_jobs_scheduled_revert")
+  @@index([status, startTime], map: "idx_price_jobs_status_start_time")
+  @@index([shopDomain, createdAt(sort: Desc)], map: "idx_price_jobs_shop_created")
+  @@map("price_jobs")
+}
+
+model JobConfigPrice {
+  configId        String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId           String   @map("job_id") @db.Uuid
+  editMethod      String   @map("edit_method")
+  editValue       Decimal? @map("edit_value") @db.Decimal
+  roundingMethod  String?  @default("none") @map("rounding_method")
+  roundingValue   String?  @map("rounding_value")
+  compareAtOption String?  @default("none") @map("compare_at_option")
+  compareAtMethod String?  @map("compare_at_method")
+  compareAtValue  Decimal? @map("compare_at_value") @db.Decimal
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_price_job_id")
+  @@map("job_config_price")
+}
+
+model JobConfigInventory {
+  configId  String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
+  method    String
+  quantity  Int
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_inventory_job_id")
+  @@map("job_config_inventory")
+}
+
+model JobConfigCost {
+  configId       String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId          String   @map("job_id") @db.Uuid
+  method         String
+  value          Decimal  @db.Decimal
+  roundingMethod String?  @map("rounding_method")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_cost_job_id")
+  @@map("job_config_cost")
+}
+
+model JobConfigTags {
+  configId      String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId         String   @map("job_id") @db.Uuid
+  tagsToAdd     String[] @map("tags_to_add")
+  tagsToRemove  String[] @map("tags_to_remove")
+  method        String?  @default("append")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_tags_job_id")
+  @@map("job_config_tags")
+}
+
+model JobConfigStatus {
+  configId     String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId        String   @map("job_id") @db.Uuid
+  targetStatus String   @map("target_status")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_status_job_id")
+  @@map("job_config_status")
+}
+
+model JobConfigMetafield {
+  configId  String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
+  namespace String
+  key       String
+  value     String?
+  valueType String?  @default("single_line_text_field") @map("value_type")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_metafield_job_id")
+  @@map("job_config_metafield")
+}
+
+model JobConfigWeight {
+  configId  String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
+  method    String
+  value     Decimal  @db.Decimal
+  unit      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_weight_job_id")
+  @@map("job_config_weight")
+}
+
+model JobConfigVendor {
+  configId    String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId       String   @map("job_id") @db.Uuid
+  method      String
+  value       String
+  findText    String?  @map("find_text")
+  replaceText String?  @map("replace_text")
+  prefixValue String?  @map("prefix_value")
+  suffixValue String?  @map("suffix_value")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_vendor_job_id")
+  @@map("job_config_vendor")
+}
+
+model JobConfigProductType {
+  configId    String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId       String   @map("job_id") @db.Uuid
+  method      String
+  value       String
+  findText    String?  @map("find_text")
+  replaceText String?  @map("replace_text")
+  prefixValue String?  @map("prefix_value")
+  suffixValue String?  @map("suffix_value")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_product_type_job_id")
+  @@map("job_config_product_type")
+}
+
+model JobConfigShipping {
+  configId  String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
+  value     Boolean
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_shipping_job_id")
+  @@map("job_config_shipping")
+}
+
+model JobConfigTaxable {
+  configId  String   @id @default(dbgenerated("uuid_generate_v4()")) @map("config_id") @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
+  value     Boolean
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  job PriceJob @relation(fields: [jobId], references: [jobId], onDelete: Cascade)
+
+  @@index([jobId], map: "idx_job_taxable_job_id")
+  @@map("job_config_taxable")
+}
+
+model MetafieldPreset {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopDomain  String   @map("shop_domain")
+  name        String
+  namespace   String
+  key         String
+  type        String
+  target      String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([shopDomain], map: "idx_metafield_presets_shop")
+  @@map("metafield_presets")
+}
+
+model Shop {
+  shop             String   @id
+  shopName         String?  @map("shop_name")
+  email            String?
+  plan             String?  @default("FREE")
+  planName         String?  @map("plan_name")
+  billingStatus    String?  @default("INACTIVE") @map("billing_status")
+  billingInterval  String?  @map("billing_interval")
+  planPrice        Decimal? @map("plan_price") @db.Decimal
+  billingPrice     Decimal? @map("billing_price") @db.Decimal
+  subscriptionId   String?  @map("subscription_id")
+  billingChargeId  String?  @map("billing_charge_id")
+  discountCode     String?  @map("discount_code")
+  discountAmount   Decimal? @map("discount_amount") @db.Decimal
+  totalSpent       Decimal? @default(0) @map("total_spent") @db.Decimal
+  lastPaymentDate  DateTime? @map("last_payment_date") @db.Timestamp(6)
+  uninstalledAt         DateTime? @map("uninstalled_at") @db.Timestamp(6)
+  lastSubscriptionCheck DateTime? @map("last_sub_check") @db.Timestamp(6)
+  lastShopifySync       DateTime? @map("last_shopify_sync") @db.Timestamp(6)
+  shopifyData           Json?     @map("shopify_data")
+  featureFlags          Json?     @default("{}") @map("feature_flags")
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt             DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
+
+  events AppEvent[]
+
+  @@index([plan], map: "idx_shops_plan")
+  @@index([uninstalledAt], map: "idx_shops_uninstalled_at")
+  @@index([billingStatus], map: "idx_shops_billing_status")
+  @@index([updatedAt], map: "idx_shops_updated_at")
+  @@map("shops")
+}
+
+model DiscountCode {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code           String    @unique
+  type           String    // "PERCENT" | "FIXED"
+  value          Decimal   @db.Decimal
+  appliesTo      String    @map("applies_to") // "MONTHLY" | "YEARLY" | "BOTH"
+  maxUses        Int?      @map("max_uses")
+  usedCount      Int       @default(0) @map("used_count")
+  expiresAt      DateTime? @map("expires_at") @db.Timestamp(6)
+  isActive       Boolean   @default(true) @map("is_active")
+  createdByShop  String?   @map("created_by_shop")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+
+  redemptions    DiscountRedemption[]
+
+  @@map("discount_codes")
+}
+
+model DiscountRedemption {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  discountCodeId       String   @map("discount_code_id") @db.Uuid
+  shopId               String   @map("shop_id")
+  planInterval         String   @map("plan_interval") // "MONTHLY" | "YEARLY"
+  originalPriceCents   Int      @map("original_price_cents")
+  discountedPriceCents Int      @map("discounted_price_cents")
+  redeemedAt           DateTime @default(now()) @map("redeemed_at") @db.Timestamp(6)
+
+  discountCode        DiscountCode @relation(fields: [discountCodeId], references: [id], onDelete: Cascade)
+
+  @@index([shopId], map: "idx_discount_redemptions_shop")
+  @@index([discountCodeId], map: "idx_discount_redemptions_code_id")
+  @@map("discount_redemptions")
+}
+
+model Task {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shop          String
+  taskName      String?   @map("task_name")
+  field         String?
+  configuration Json?
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+
+  runs TaskRun[]
+
+  @@index([shop], map: "idx_tasks_shop")
+  @@map("tasks")
+}
+
+model TaskRun {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  taskId          String?   @map("task_id") @db.Uuid
+  jobId           String?   @map("job_id") @db.Uuid
+  shop            String?
+  status          String?
+  totalItems      Int?      @default(0) @map("total_items")
+  successItems    Int?      @default(0) @map("success_items")
+  failedItems     Int?      @default(0) @map("failed_items")
+  totalProducts   Int?      @default(0) @map("total_products")
+  updatedProducts Int?      @default(0) @map("updated_products")
+  failedProducts  Int?      @default(0) @map("failed_products")
+  errorMessage    String?   @map("error_message")
+  startedAt       DateTime? @map("started_at") @db.Timestamp(6)
+  completedAt     DateTime? @map("completed_at") @db.Timestamp(6)
+
+  task  Task?         @relation(fields: [taskId], references: [id])
+  items TaskRunItem[]
+
+  @@index([shop], map: "idx_task_runs_shop")
+  @@index([taskId], map: "idx_task_runs_task_id")
+  @@index([jobId], map: "idx_task_runs_job_id")
+  @@map("task_runs")
+}
+
+model TaskRunItem {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId         String?   @map("run_id") @db.Uuid
+  shop          String?
+  productId     String?   @map("product_id")
+  productTitle  String?   @map("product_title")
+  fieldName     String?   @map("field_name")
+  originalValue String?   @map("original_value")
+  newValue      String?   @map("new_value")
+  status        String?
+  errorMessage  String?   @map("error_message")
+  metadata      Json?     @default("{}")
+  createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamp(6)
+
+  run TaskRun? @relation(fields: [runId], references: [id])
+
+  @@index([runId], map: "idx_task_run_items_run_id")
+  @@map("task_run_items")
+}
+
+model AppEvent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopDomain String   @map("shop_domain")
+  eventName  String   @map("event_name")
+  metadata   Json?    @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  shop Shop @relation(fields: [shopDomain], references: [shop], onDelete: Cascade)
+
+  @@index([shopDomain, createdAt], map: "idx_app_events_shop_domain_created_at")
+  @@index([eventName, createdAt], map: "idx_app_events_event_name_created_at")
+  @@map("app_events")
+}
+
+model MetafieldFavorite {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shop      String
+  target    String
+  namespace String
+  key       String
+  type      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@unique([shop, target, namespace, key], name: "shop_target_namespace_key")
+  @@map("metafield_favorites")
+}
+
+model MetafieldRecent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shop       String
+  target     String
+  namespace  String
+  key        String
+  type       String
+  lastUsedAt DateTime @default(now()) @map("last_used_at") @db.Timestamp(6)
+
+  @@unique([shop, target, namespace, key], name: "shop_target_namespace_key_compound_id")
+  @@map("metafield_recent")
+}
+
+model DemoProduct {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shop      String
+  productId String   @map("product_id")
+  taskId    String?  @map("task_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@map("demo_products")
+}
+
+model AdminLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopDomain String   @map("shop_domain")
+  adminEmail String   @map("admin_email")
+  action     String
+  details    Json?    @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([shopDomain], map: "idx_admin_logs_shop_domain")
+  @@map("admin_logs")
+}
+
+model SupportNote {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopDomain   String    @map("shop_domain")
+  issueText    String    @map("issue_text")
+  priority     String    @default("Medium")
+  followUpDate DateTime? @map("follow_up_date") @db.Timestamp(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(6)
+  updatedAt    DateTime  @default(now()) @map("updated_at") @db.Timestamp(6)
+
+  @@index([shopDomain], map: "idx_support_notes_shop")
+  @@map("support_notes")
+}
+
+model AdminActionLog {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shopDomain    String   @map("shop_domain")
+  actionType    String   @map("action_type")
+  actionPayload Json?    @default("{}") @map("action_payload")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([shopDomain], map: "idx_admin_actions_log_shop")
+  @@map("admin_actions_log")
+}
+
+model TaskLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobId       String   @map("job_id") @db.Uuid
+  shopDomain  String   @map("shop_domain")
+  level       String   @default("info")
+  message     String
+  payloadJson Json?    @default("{}") @map("payload_json")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamp(6)
+
+  @@index([jobId], map: "idx_task_logs_job")
+  @@index([shopDomain], map: "idx_task_logs_shop")
+  @@map("task_logs")
+}

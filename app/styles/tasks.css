@@ -1,0 +1,415 @@
+/* Tasks Page Styles */
+.preview-container {
+    position: sticky;
+    top: 0;
+    max-height: 800px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.strikethrough {
+    text-decoration: line-through;
+    color: var(--p-color-text-subdued);
+}
+
+.bold {
+    font-weight: var(--p-font-weight-bold);
+}
+
+/* Premium Dashboard Styles */
+.metric-card {
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease-in-out;
+    cursor: default;
+}
+
+.metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--p-shadow-300);
+}
+
+.quick-action-card {
+    transition: all 0.2s ease-in-out;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.quick-action-card:hover {
+    border-color: var(--p-color-border-brand);
+    background-color: var(--p-color-bg-surface-hover-secondary);
+    transform: scale(1.02);
+}
+
+.skeleton-pulse {
+    animation: pulse 1.5s infinite ease-in-out;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+}
+
+@keyframes pulse {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+.premium-empty-state {
+    background: radial-gradient(circle at top right, var(--p-color-bg-surface-secondary), transparent);
+}
+
+.floating-preview {
+    box-shadow: var(--p-shadow-500);
+    border-radius: var(--p-border-radius-300);
+}
+
+/* Independent Scrolling Columns */
+.scrollable-column {
+    position: sticky;
+    top: 20px;
+    height: 800px;
+    overflow-y: auto;
+    padding-right: 4px;
+    /* Space for scrollbar */
+}
+
+/* Custom scrollbar for better visibility */
+.scrollable-column::-webkit-scrollbar {
+    width: 6px;
+}
+
+.scrollable-column::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.scrollable-column::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+/* Sticky Side Panel & Collapsible UI */
+.sticky-side-panel {
+    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collapsed-panel-trigger {
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.collapsed-panel-trigger:hover {
+    background-color: #ebeced !important;
+}
+
+.collapsed-panel-text {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    white-space: nowrap;
+    user-select: none;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #4a4a4a;
+}
+
+.collapsed-panel-trigger:hover .collapsed-panel-text {
+    color: var(--p-color-text-brand);
+    letter-spacing: 4px;
+    transform: scale(1.05);
+}
+
+.sticky-panel-expanded {
+    background: transparent;
+}
+
+.sticky-panel-collapsed {
+    background-color: #f1f1f2;
+    border: 1px solid #e1e3e5;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.02);
+}
+
+/* New Premium Dashboard Hero */
+.premium-dashboard-hero {
+    position: relative;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 40%, #d946ef 100%);
+    color: white !important;
+    border-radius: 24px;
+    padding: 56px 48px;
+    overflow: hidden;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 20px 40px -15px rgba(99, 102, 241, 0.4);
+}
+
+.hero-background-shapes {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.hero-shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.4;
+}
+
+.hero-shape-1 {
+    top: -20%;
+    right: -10%;
+    width: 400px;
+    height: 400px;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.hero-shape-2 {
+    bottom: -10%;
+    left: -5%;
+    width: 300px;
+    height: 300px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 60%;
+}
+
+.hero-badge-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.hero-badge {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 100px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    letter-spacing: 0.02em;
+}
+
+.hero-badge.version {
+    color: #34d399;
+}
+
+.hero-sync-text {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 500;
+}
+
+.hero-title {
+    font-size: clamp(2rem, 5vw, 3.5rem) !important;
+    font-weight: 800 !important;
+    line-height: 1.1 !important;
+    margin-bottom: 20px !important;
+    letter-spacing: -0.02em !important;
+}
+
+.hero-subtitle {
+    font-size: 18px !important;
+    color: rgba(255, 255, 255, 0.85) !important;
+    max-width: 500px;
+    line-height: 1.6 !important;
+}
+
+.hero-stats {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    gap: 24px;
+}
+
+.hero-glass-card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 20px;
+    padding: 24px 32px;
+    min-width: 180px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s ease;
+}
+
+.hero-glass-card:hover {
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.hero-stat-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 8px;
+    letter-spacing: 0.01em;
+}
+
+.hero-stat-value {
+    font-size: 40px;
+    font-weight: 800;
+    color: white;
+    line-height: 1;
+}
+
+/* Mini Hero for subpages */
+.premium-hero-mini {
+    position: relative;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white !important;
+    border-radius: 20px;
+    padding: 32px 40px;
+    overflow: hidden;
+    box-shadow: 0 10px 25px -5px rgba(99, 102, 241, 0.3);
+}
+
+.premium-hero-mini h1,
+.premium-hero-mini p,
+.premium-hero-mini span {
+    color: white;
+    /* Inherit white by default */
+}
+
+/* Specifically target the labels to ensure they are bright white */
+.premium-hero-mini .Polaris-Text--variantHeading2xl,
+.premium-hero-mini .Polaris-Text--variantHeading3xl {
+    color: white !important;
+}
+
+/* Ensure Polaris internal components like Badges and Buttons are NOT affected by our white override */
+.premium-hero-mini .Polaris-Badge *,
+.premium-hero-mini .Polaris-Button * {
+    color: inherit !important;
+}
+
+/* Restore Badge text visibility - Explicitly set to black as requested */
+.premium-hero-mini .Polaris-Badge {
+    color: #1a1a1a !important;
+}
+
+.premium-hero-mini .Polaris-Badge span {
+    color: #1a1a1a !important;
+}
+
+@media (max-width: 1024px) {
+    .premium-dashboard-hero {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 40px;
+        padding: 40px;
+    }
+
+    .hero-content {
+        max-width: 100%;
+    }
+}
+
+/* Custom Time Picker */
+.time-picker-column {
+    max-height: 250px;
+    overflow-y: auto !important;
+    width: 60px;
+    display: flex;
+    flex-direction: column;
+}
+
+.time-picker-column::-webkit-scrollbar {
+    width: 4px;
+}
+
+.time-picker-column::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.time-picker-column::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+
+.time-picker-item {
+    padding: 10px 4px;
+    cursor: pointer;
+    border-radius: 8px;
+    text-align: center;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    user-select: none;
+    font-size: 14px;
+}
+
+.time-picker-item:hover {
+    background-color: var(--p-color-bg-surface-hover);
+}
+
+.time-picker-period-column {
+    width: 70px;
+}
+
+.time-picker-active .Polaris-TextField__Input {
+    background-color: #fce7f3 !important;
+    /* light pink */
+    border-color: #6366f1 !important;
+    /* indigo */
+}
+
+/* Clean Premium Selected State - Light Blue Theme */
+.time-picker-item-selected {
+    background-color: #eef5ff !important;
+    /* Soft Premium Light Blue */
+    color: #005bd3 !important;
+    /* Deep Premium Blue Text */
+    border: 1px solid #d4e7ff !important;
+    font-weight: 600 !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.time-picker-item-selected span {
+    color: #005bd3 !important;
+    /* Match the parent deep blue */
+}
+
+/* Ensure column headers are clear */
+.time-picker-column {
+    border: 1px solid #f1f1f1;
+    border-radius: 8px;
+    background: #fafafa;
+}
+
+/* Compact Time Picker Adjustments */
+.time-picker-column {
+    max-height: 180px;
+    /* Shorter for better fit */
+    width: 45px;
+    /* Narrower columns */
+}
+
+.time-picker-item {
+    padding: 6px 2px;
+    /* Less vertical padding */
+    font-size: 13px;
+    /* Slightly smaller text */
+    border-radius: 6px;
+}
+
+.time-picker-period-column {
+    width: 55px;
+}
+
+/* End of Time Picker Styles */
