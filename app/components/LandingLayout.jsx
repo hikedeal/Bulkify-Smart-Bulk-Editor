@@ -41,6 +41,7 @@ export default function LandingLayout({ children }) {
             <ul>
               <li><Link to="/faq">FAQ</Link></li>
               <li><Link to="/privacy">Privacy Policy</Link></li>
+              <li><a href="mailto:info@bulkify.co">info@bulkify.co</a></li>
             </ul>
           </div>
           <div className={styles.footerCol}>
