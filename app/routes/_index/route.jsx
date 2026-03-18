@@ -43,15 +43,19 @@ export default function App() {
       </div>
 
       <section id="features" className={styles.features}>
-        <span style={{ color: 'var(--primary)', fontWeight: 800 }}>FEATURES</span>
-        <h2 style={{ fontSize: '3rem', marginTop: '1rem' }}>Built for Power Users</h2>
+        <span style={{ color: 'var(--primary)', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', fontSize: '0.85rem' }}>FEATURES</span>
+        <h2 style={{ fontSize: '3.5rem', marginTop: '1rem', letterSpacing: '-0.04em' }}>Built for Power Users</h2>
         <div className={styles.featureGrid}>
-          <div className={styles.featureCard}><h3>💰 Price Manager</h3><p>Adjust thousands of prices with smart rounding logic.</p></div>
-          <div className={styles.featureCard}><h3>📦 Live Inventory</h3><p>Sync levels across all warehouse locations instantly.</p></div>
-          <div className={styles.featureCard}><h3>🏷️ Tag Architect</h3><p>Clean up your store organization in seconds.</p></div>
-          <div className={styles.featureCard}><h3>📂 Metafield Master</h3><p>Complete control over custom fields and SEO.</p></div>
-          <div className={styles.featureCard}><h3>🚦 Status Guard</h3><p>Bulk publish products with 1-click safety.</p></div>
-          <div className={styles.featureCard}><h3>📉 Sale Scheduler</h3><p>Plan and execute seasonal sales across collections.</p></div>
+          <div className={styles.featureCard}><h3>💰 Update Prices</h3><p>Adjust product prices in bulk by percentage or flat amounts.</p></div>
+          <div className={styles.featureCard}><h3>🏷️ Compare Price</h3><p>Manage "compare at" prices to run irresistible storewide sales.</p></div>
+          <div className={styles.featureCard}><h3>🚦 Product Status</h3><p>Securely publish, draft, or archive products at total scale.</p></div>
+          <div className={styles.featureCard}><h3>📦 Sync Inventory</h3><p>Keep stock levels ruthlessly accurate across multiple locations.</p></div>
+          <div className={styles.featureCard}><h3>📂 Manage Tags</h3><p>Add, remove, or replace tags to organize your catalog quickly.</p></div>
+          <div className={styles.featureCard}><h3>👕 Product Type</h3><p>Reclassify hundreds of items into the correct category instantly.</p></div>
+          <div className={styles.featureCard}><h3>🏭 Change Vendor</h3><p>Shift suppliers or brand mappings across your catalog in seconds.</p></div>
+          <div className={styles.featureCard}><h3>⚖️ Edit Weight</h3><p>Fix shipping calculation issues by standardizing product weights.</p></div>
+          <div className={styles.featureCard}><h3>🧾 Tax Settings</h3><p>Ensure tax compliance by toggling taxable status in bulk.</p></div>
+          <div className={styles.featureCard}><h3>⚡ Metafields</h3><p>Unlock custom data control for advanced storefront SEO.</p></div>
         </div>
       </section>
 
