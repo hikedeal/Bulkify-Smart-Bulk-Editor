@@ -92,6 +92,34 @@ h1, h2, h3, h4 {
   filter: brightness(1.1);
 }
 
+.finalCta .btnRed:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(255, 62, 108, 0.4);
+}
+
+.discountCallout {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: -1rem;
+  margin-bottom: 1.5rem;
+}
+
+.discountCallout strong {
+  color: #10b981; /* green */
+}
+
+.strikethrough {
+  text-decoration: line-through;
+  opacity: 0.6;
+  margin-right: 0.4rem;
+}
+
+.discountSpacer {
+  height: 20px;
+  margin-top: -1rem;
+  margin-bottom: 1.5rem;
+}
+
 .btnOutline {
   background: transparent;
   color: var(--text-main);

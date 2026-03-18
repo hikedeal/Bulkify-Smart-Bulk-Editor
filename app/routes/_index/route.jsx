@@ -191,6 +191,13 @@ export default function Index() {
                 {billingCycle === "monthly" ? "$15" : "$150"}
                 <span>{billingCycle === "monthly" ? "/mo" : "/yr"}</span>
               </div>
+              {billingCycle === "yearly" ? (
+                <div className={styles.discountCallout}>
+                   <span className={styles.strikethrough}>$180</span> <strong>Save $30</strong> (2 months free)
+                </div>
+              ) : (
+                <div className={styles.discountSpacer}></div>
+              )}
               <div className={styles.featureItem}>✓ Unlimited Edits</div>
               <div className={styles.featureItem}>✓ Smart Rounding</div>
               <div className={styles.featureItem}>✓ Priority Support</div>
