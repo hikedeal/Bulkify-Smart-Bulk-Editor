@@ -8,8 +8,8 @@ export default function LandingLayout({ children }) {
         <Link to="/" className={styles.logo}>Bulkify</Link>
         <div className={styles.navLinks}>
           <a href="/#features" className={styles.navLink}>Features</a>
-          <Link to="/pricing" className={styles.navLink}>Pricing</a>
-          <Link to="/tutorial" className={styles.navLink}>Tutorial</a>
+          <Link to="/pricing" className={styles.navLink}>Pricing</Link>
+          <Link to="/tutorial" className={styles.navLink}>Tutorial</Link>
           <Link to="/auth/login" className={styles.navButton}>Get Started</Link>
         </div>
       </nav>
