@@ -1,109 +1,193 @@
-import { redirect } from "react-router";
+import { Link } from "@remix-run/react";
 import styles from "./styles.module.css";
+import LandingLayout from "../components/LandingLayout";
 
-export const loader = async ({ request }) => {
-  const url = new URL(request.url);
-  const shop = url.searchParams.get("shop");
-  if (shop) throw redirect(`/app?${url.searchParams.toString()}`);
-  return null;
-};
-
-export default function App() {
+export default function Index() {
   return (
-    <div className={styles.index}>
-      <nav className={styles.nav}>
-        <a href="/" className={styles.logo}>Bulkify</a>
-        <div className={styles.navLinks}>
-          <a href="#features" className={styles.navLink}>Products</a>
-          <a href="#how" className={styles.navLink}>Process</a>
-          <a href="/pricing" className={styles.navLink}>Pricing</a>
-        </div>
-        <div className={styles.navButtons}>
-          <a href="/auth/login" className={styles.navLink} style={{ marginRight: '1rem' }}>Log in</a>
-          <a href="/auth/login" className={styles.btnBlack}>Start for free</a>
-        </div>
-      </nav>
+    <LandingLayout>
+      <div className={styles.index}>
+        
+        {/* HERO SECTION */}
+        <section className={styles.hero}>
+          <div className={styles.heroGlow}></div>
+          <div className={styles.badge}>✨ The New Standard for Shopify</div>
+          <h1 className={styles.heroTitle}>
+            Turn store updates into <span className={styles.highlight}>growth</span>
+          </h1>
+          <p className={styles.heroSubtitle}>
+            The smartest bulk editor for Shopify. Manage prices, inventory, tags and metafields at total scale without the fear of making mistakes.
+          </p>
+          <div className={styles.heroCTA}>
+            <Link to="/auth/login" className={styles.btnRed}>Start Free Trial</Link>
+            <Link to="/auth/login" className={styles.btnOutline}>Book a Demo</Link>
+          </div>
 
-      <section className={styles.hero}>
-        <div className={styles.badge}>🟢 &nbsp; First 7 days - 100% Free</div>
-        <h1 className={styles.heroTitle}>Turn store updates into <span className={styles.highlight}>growth</span></h1>
-        <p className={styles.heroSubtitle}>Precision bulk edits for your Shopify catalog. Manage prices, inventory, tags and metafields at scale.</p>
-        <div className={styles.heroCTA}>
-          <a href="/auth/login" className={styles.btnBlack} style={{ padding: '1.2rem 3rem' }}>Get started now</a>
-          <a href="#how" className={styles.navLink} style={{ padding: '1.2rem 2rem', border: '1px solid #e2e8f0', borderRadius: '99px' }}>How it works</a>
-        </div>
-      </section>
+          {/* HERO APP PREVIEW */}
+          <div className={styles.heroPreviewWindow}>
+            <div className={styles.previewHeader}>
+              <div className={styles.trafficLights}>
+                <span></span><span></span><span></span>
+              </div>
+              <div className={styles.urlBar}>bulkify.co/dashboard</div>
+            </div>
+            <div className={styles.previewContent}>
+              <div className={styles.mockSidebar}>
+                 <div className={styles.mockBone}></div>
+                 <div className={styles.mockBone}></div>
+                 <div className={styles.mockBone}></div>
+              </div>
+              <div className={styles.mockMain}>
+                 <div className={styles.mockHeader}>
+                   <h2>Task Dashboard</h2>
+                   <div className={styles.mockAvatar}></div>
+                 </div>
+                 <div className={styles.mockTable}>
+                    <div className={styles.mockRow}></div>
+                    <div className={styles.mockRow}></div>
+                    <div className={styles.mockRow}></div>
+                    <div className={styles.mockRow}></div>
+                 </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      <div className={styles.previewGrid}>
-        <div className={styles.previewCard}><div className={styles.previewOverlay}><h4>💰 Price Editor</h4><p>Global MSRP adjustment.</p></div></div>
-        <div className={styles.previewCard}><div className={styles.previewOverlay}><h4>📦 Stock Hub</h4><p>Real-time inventory sync.</p></div></div>
-        <div className={styles.previewCard}><div className={styles.previewOverlay}><h4>🏷️ Tag Master</h4><p>Bulk tag architect.</p></div></div>
-        <div className={styles.previewCard}><div className={styles.previewOverlay}><h4>🚦 Status Guard</h4><p>Safe publish/archive.</p></div></div>
-        <div className={styles.previewCard}><div className={styles.previewOverlay}><h4>📂 Metafield Pro</h4><p>Custom data control.</p></div></div>
+        {/* TRUSTED BY (SOCIAL PROOF) */}
+        <section className={styles.trusted}>
+          <p>Trusted by hyper-growth Shopify Plus brands</p>
+          <div className={styles.logoGrid}>
+            <span className={styles.brandLogo}>Gymshark</span>
+            <span className={styles.brandLogo}>Allbirds</span>
+            <span className={styles.brandLogo}>FashionNova</span>
+            <span className={styles.brandLogo}>KylieCosmetics</span>
+            <span className={styles.brandLogo}>MVMT</span>
+          </div>
+        </section>
+
+        {/* 10 POWER FEATURES GRID */}
+        <section id="features" className={styles.featuresSection}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionLabel}>CAPABILITIES</span>
+            <h2 className={styles.sectionTitle}>Everything you need to scale</h2>
+            <p className={styles.sectionSubtitle}>Ten dedicated, laser-focused tools to manage your entire catalog.</p>
+          </div>
+          <div className={styles.featureGrid}>
+            <div className={styles.featureCard}><h3>💰 Update Prices</h3><p>Adjust product prices in bulk by percentage or flat amounts.</p></div>
+            <div className={styles.featureCard}><h3>🏷️ Compare Price</h3><p>Manage "compare at" prices to run irresistible storewide sales.</p></div>
+            <div className={styles.featureCard}><h3>🚦 Product Status</h3><p>Securely publish, draft, or archive products at total scale.</p></div>
+            <div className={styles.featureCard}><h3>📦 Sync Inventory</h3><p>Keep stock levels ruthlessly accurate across multiple locations.</p></div>
+            <div className={styles.featureCard}><h3>📂 Manage Tags</h3><p>Add, remove, or replace tags to organize your catalog quickly.</p></div>
+            <div className={styles.featureCard}><h3>👕 Product Type</h3><p>Reclassify hundreds of items into the correct category instantly.</p></div>
+            <div className={styles.featureCard}><h3>🏭 Change Vendor</h3><p>Shift suppliers or brand mappings across your catalog in seconds.</p></div>
+            <div className={styles.featureCard}><h3>⚖️ Edit Weight</h3><p>Fix shipping calculation issues by standardizing product weights.</p></div>
+            <div className={styles.featureCard}><h3>🧾 Tax Settings</h3><p>Ensure tax compliance by toggling taxable status in bulk.</p></div>
+            <div className={styles.featureCard}><h3>⚡ Metafields</h3><p>Unlock custom data control for advanced storefront SEO.</p></div>
+          </div>
+        </section>
+
+        {/* DEEP DIVE ALTERNATING SECTIONS */}
+        <section className={styles.deepDiveSection}>
+           <div className={styles.alternatingRow}>
+              <div className={styles.alternatingText}>
+                 <span className={styles.featurePill}>Smart Logic</span>
+                 <h3>Intelligent Smart Pricing</h3>
+                 <p>Don't just change prices blindly. Use our smart rounding engine to automatically turn messy calculations like $19.43 into clean, converted numbers like $19.99 across thousands of variants.</p>
+                 <ul className={styles.featureChecklist}>
+                   <li>✅ Bulk Margin Adjustments</li>
+                   <li>✅ Smart Cent Rounding (e.g. .99 or .95)</li>
+                   <li>✅ Total Compare-at Price automation</li>
+                 </ul>
+              </div>
+              <div className={styles.alternatingVisual}>
+                 <div className={styles.glowBox}>
+                    <p className={styles.strikeText}>$19.43</p>
+                    <p className={styles.newPrice}>$19.99</p>
+                 </div>
+              </div>
+           </div>
+
+           <div className={`${styles.alternatingRow} ${styles.reverse}`}>
+              <div className={styles.alternatingText}>
+                 <span className={styles.featurePill}>Peace of Mind</span>
+                 <h3>Safe & Reversible Edits</h3>
+                 <p>Made a mistake on Black Friday? No problem. Every task is heavily versioned, securely backed up to the cloud, and can be instantly reversed with a single click.</p>
+                 <ul className={styles.featureChecklist}>
+                   <li>✅ 30-Day Change History</li>
+                   <li>✅ 1-Click Secure Rollbacks</li>
+                   <li>✅ Pre-flight Error Validations</li>
+                 </ul>
+              </div>
+              <div className={styles.alternatingVisual}>
+                 <div className={styles.glowBox}>
+                    <div className={styles.rollbackUi}>
+                       <span className={styles.timeIcon}>⏱️</span>
+                       <div className={styles.rollbackDetails}>
+                         <strong>Revert Task #4922</strong>
+                         <span>Restoring 4,203 prices...</span>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+           </div>
+        </section>
+
+        {/* TESTIMONIALS */}
+        <section className={styles.testimonials}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionLabel}>SOCIAL PROOF</span>
+            <h2 className={styles.sectionTitle}>Merchants love Bulkify</h2>
+          </div>
+          <div className={styles.testimonialGrid}>
+            <div className={styles.testimonialCard}>
+              <div className={styles.stars}>⭐⭐⭐⭐⭐</div>
+              <p>"Saved us literally 40 hours of manual work during Black Friday. The UI is incredibly fast and intuitive. Best ROI we've spent this year."</p>
+              <h4>Sarah J. <span className={styles.founderTitle}>Founder at Elevate</span></h4>
+            </div>
+            <div className={styles.testimonialCard}>
+               <div className={styles.stars}>⭐⭐⭐⭐⭐</div>
+               <p>"I've tried 5 different bulk editors. This is the only one that handles our 20,000+ SKU catalog without crashing or skipping variants."</p>
+               <h4>Mike T. <span className={styles.founderTitle}>Ecom Director</span></h4>
+            </div>
+            <div className={styles.testimonialCard}>
+               <div className={styles.stars}>⭐⭐⭐⭐⭐</div>
+               <p>"The smart pricing rounding paid for itself in a single day. It's an absolute must-have app for any serious scaling store."</p>
+               <h4>Jessica R. <span className={styles.founderTitle}>Brand Manager</span></h4>
+            </div>
+          </div>
+        </section>
+
+        {/* PRICING PREVIEW */}
+        <section className={styles.pricingPreview}>
+          <div className={styles.sectionHeader}>
+            <span className={styles.sectionLabel}>PRICING</span>
+            <h2 className={styles.sectionTitle}>Simple, transparent pricing</h2>
+          </div>
+          <div className={styles.pricingGrid}>
+            <div className={styles.priceCard}>
+              <h4>FREE</h4>
+              <div className={styles.priceVal}>$0<span>/mo</span></div>
+              <div className={styles.featureItem}>✓ 200 Edits/mo</div>
+              <div className={styles.featureItem}>✓ Core Features</div>
+            </div>
+            <div className={`${styles.priceCard} ${styles.featured}`}>
+              <h4>PRO</h4>
+              <div className={styles.priceVal}>$15<span>/mo</span></div>
+              <div className={styles.featureItem}>✓ Unlimited Edits</div>
+              <div className={styles.featureItem}>✓ Smart Rounding</div>
+              <div className={styles.featureItem}>✓ Priority Support</div>
+              <Link to="/auth/login" className={styles.btnWhite}>Get Started</Link>
+            </div>
+          </div>
+        </section>
+
+        {/* FINAL CTA */}
+        <section className={styles.finalCta}>
+          <h2>Ready to unlock your catalog's potential?</h2>
+          <p>Join thousands of growing Shopify brands today.</p>
+          <Link to="/auth/login" className={styles.btnRed}>Install Bulkify Free</Link>
+        </section>
+
       </div>
-
-      <section id="features" className={styles.features}>
-        <span style={{ color: 'var(--primary)', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', fontSize: '0.85rem' }}>FEATURES</span>
-        <h2 style={{ fontSize: '3.5rem', marginTop: '1rem', letterSpacing: '-0.04em' }}>Built for Power Users</h2>
-        <div className={styles.featureGrid}>
-          <div className={styles.featureCard}><h3>💰 Update Prices</h3><p>Adjust product prices in bulk by percentage or flat amounts.</p></div>
-          <div className={styles.featureCard}><h3>🏷️ Compare Price</h3><p>Manage "compare at" prices to run irresistible storewide sales.</p></div>
-          <div className={styles.featureCard}><h3>🚦 Product Status</h3><p>Securely publish, draft, or archive products at total scale.</p></div>
-          <div className={styles.featureCard}><h3>📦 Sync Inventory</h3><p>Keep stock levels ruthlessly accurate across multiple locations.</p></div>
-          <div className={styles.featureCard}><h3>📂 Manage Tags</h3><p>Add, remove, or replace tags to organize your catalog quickly.</p></div>
-          <div className={styles.featureCard}><h3>👕 Product Type</h3><p>Reclassify hundreds of items into the correct category instantly.</p></div>
-          <div className={styles.featureCard}><h3>🏭 Change Vendor</h3><p>Shift suppliers or brand mappings across your catalog in seconds.</p></div>
-          <div className={styles.featureCard}><h3>⚖️ Edit Weight</h3><p>Fix shipping calculation issues by standardizing product weights.</p></div>
-          <div className={styles.featureCard}><h3>🧾 Tax Settings</h3><p>Ensure tax compliance by toggling taxable status in bulk.</p></div>
-          <div className={styles.featureCard}><h3>⚡ Metafields</h3><p>Unlock custom data control for advanced storefront SEO.</p></div>
-        </div>
-      </section>
-
-      <section id="how" className={styles.steps}>
-        <span style={{ color: 'var(--primary)', fontWeight: 800 }}>PROCESS</span>
-        <h2 style={{ fontSize: '3rem', marginTop: '1rem' }}>Success in 3 steps</h2>
-        <div className={styles.stepGrid}>
-          <div className={styles.stepItem}><span className={styles.stepNum}>01</span><h3>Connect Shopify</h3><p>Link your store in one click. We sync your existing catalog safely.</p></div>
-          <div className={styles.stepItem}><span className={styles.stepNum}>02</span><h3>Filter & Select</h3><p>Pinpoint products by tag, price, collection, or custom metafields.</p></div>
-          <div className={styles.stepItem}><span className={styles.stepNum}>03</span><h3>Apply & Scale</h3><p>Apply updates instantly. Revert any change with a single click.</p></div>
-        </div>
-      </section>
-
-      <section className={styles.faqSection}>
-        <span style={{ color: 'var(--primary)', fontWeight: 800 }}>FAQ</span>
-        <h2 style={{ fontSize: '3rem', marginTop: '1rem' }}>Common Questions</h2>
-        <div className={styles.faqContainer}>
-          <details className={styles.faqItem} open>
-            <summary>How safe is Bulkify? <span>+</span></summary>
-            <p>Extremely safe. We use Shopify's official API and every change is logged. You can undo any operation with one click.</p>
-          </details>
-          <details className={styles.faqItem}>
-            <summary>Can I edit Metafields? <span>+</span></summary>
-            <p>Yes! Bulkify Pro includes a full Metafield Architect for all your custom field needs.</p>
-          </details>
-          <details className={styles.faqItem}>
-            <summary>What platforms do you support? <span>+</span></summary>
-            <p>Currently we are exclusively built for Shopify stores of all sizes.</p>
-          </details>
-        </div>
-      </section>
-
-      <section id="pricing" className={styles.pricing}>
-        <h2 style={{ fontSize: '3.5rem', fontWeight: 800 }}>Simple, transparent pricing</h2>
-        <div className={styles.pricingGrid}>
-          <div className={styles.priceCard}><h4>FREE</h4><div className={styles.priceVal}>$0<span>/mo</span></div><ul><li className={styles.featureItem}>✓ 1,000 Edits</li><li className={styles.featureItem}>✓ Basic Filters</li></ul></div>
-          <div className={styles.priceCard}><h4>ESSENTIAL</h4><div className={styles.priceVal}>$9<span>/mo</span></div><ul><li className={styles.featureItem}>✓ 5,000 Edits</li><li className={styles.featureItem}>✓ All Features</li></ul></div>
-          <div className={`${styles.priceCard} ${styles.featured}`}><h4>PRO</h4><div className={styles.priceVal}>$15<span>/mo</span></div><p style={{ color: 'var(--primary)', fontWeight: 'bold' }}>MOST POPULAR</p><ul><li className={styles.featureItem}>✓ Unlimited Updates</li><li className={styles.featureItem}>✓ Priority Support</li></ul></div>
-          <div className={styles.priceCard}><h4>CUSTOM</h4><div className={styles.priceVal}>Contact</div><ul><li className={styles.featureItem}>✓ Enterprise Logic</li><li className={styles.featureItem}>✓ Account Manager</li></ul></div>
-        </div>
-      </section>
-
-      <section className={styles.finalCta}>
-        <h2 style={{ fontSize: '3rem', marginBottom: '2rem' }}>Ready to scale your store?</h2>
-        <a href="/auth/login" className={styles.btnRed}>Install Bulkify Now</a>
-      </section>
-
-      <footer className={styles.footer}>&copy; 2026 Bulkify Inc. The world's fastest Shopify bulk editor.</footer>
-    </div>
+    </LandingLayout>
   );
 }
