@@ -40,11 +40,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
                     id
                     name
                     handle
-                    currencySettings {
-                        baseCurrency {
-                            currencyCode
-                        }
-                    }
+
                 }
             }
         }
@@ -157,7 +153,7 @@ export const action = async ({ request, params }: any) => {
                             markets(first: 50) {
                                 nodes {
                                     handle
-                                    currencySettings { baseCurrency { currencyCode } }
+
                                 }
                             }
                         }
@@ -173,7 +169,7 @@ export const action = async ({ request, params }: any) => {
 
                     if (config.selectedMarkets?.length > 0) {
                         const mObj = markets.find((m: any) => m.handle === config.selectedMarkets[0]);
-                        const mCurr = mObj?.currencySettings?.baseCurrency?.currencyCode || currencyCode;
+                        const mCurr = currencyCode || currencyCode;
                         const icons: Record<string, string> = { USD: "$", INR: "₹", GBP: "£", EUR: "€", CAD: "$", AUD: "$" };
                         emailCurrency = icons[mCurr] || mCurr;
                     } else {
@@ -292,7 +288,7 @@ export default function TaskDetail() {
         if (!mHandle || mHandle === 'base') return shopCurrency;
 
         const mObj = markets.find((m: any) => m.handle === mHandle);
-        const mCurr = mObj?.currencySettings?.baseCurrency?.currencyCode || currencyCode;
+        const mCurr = currencyCode || currencyCode;
         return icons[mCurr] || mCurr;
     }, [markets, shopCurrency, currencyCode]);
 
@@ -351,7 +347,7 @@ export default function TaskDetail() {
     const getPreviewCurrency = (scope: string) => {
         if (scope === 'base') return shopCurrency;
         const mObj = markets.find((m: any) => m.handle === scope);
-        const mCurr = mObj?.currencySettings?.baseCurrency?.currencyCode || currencyCode;
+        const mCurr = currencyCode || currencyCode;
         const icons: Record<string, string> = { USD: "$", INR: "₹", GBP: "£", EUR: "€", CAD: "$", AUD: "$" };
         return icons[mCurr] || mCurr;
     };
@@ -673,7 +669,7 @@ export default function TaskDetail() {
                                                                 <BlockStack gap="200">
                                                                     {task.configuration.selectedMarkets.map((mHandle: string) => {
                                                                         const mObj = markets.find((m: any) => m.handle === mHandle);
-                                                                        const mCurr = mObj?.currencySettings?.baseCurrency?.currencyCode || currencyCode;
+                                                                        const mCurr = currencyCode || currencyCode;
                                                                         const symbol = getCurrencySymbol(mHandle);
                                                                         const isDifferent = mCurr !== currencyCode;
 

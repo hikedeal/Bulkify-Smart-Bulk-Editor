@@ -123,7 +123,7 @@ async function getMarketPriceLists(shopifyAdmin: any, selectedMarkets: string[])
                 markets(first: 50) {
                     nodes {
                         handle
-                        currencySettings { baseCurrency { currencyCode } }
+
                         catalogue {
                             id
                             ... on BusinessCatalogue { priceList { id } }
@@ -139,7 +139,7 @@ async function getMarketPriceLists(shopifyAdmin: any, selectedMarkets: string[])
             if (priceListId && selectedMarkets?.includes(m.handle)) {
                 marketPriceLists[m.handle] = {
                     priceListId,
-                    currency: m.currencySettings?.baseCurrency?.currencyCode || "USD"
+                    currency: "USD"
                 };
             }
         });

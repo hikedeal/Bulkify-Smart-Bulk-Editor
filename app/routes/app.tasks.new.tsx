@@ -772,11 +772,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                                 }
                             }
                         }
-                        currencySettings {
-                            baseCurrency {
-                                currencyCode
-                            }
-                        }
+
                     }
                 }
                 shop {
@@ -1380,7 +1376,7 @@ export default function CreateTaskPage() {
             return getCurrencySymbolLocal(shop.currencyCode);
         }
         const marketObj = markets.find((m: any) => m.handle === selectedPreviewMarket);
-        const code = marketObj?.currencySettings?.baseCurrency?.currencyCode || shop.currencyCode;
+        const code = shop.currencyCode || shop.currencyCode;
         return getCurrencySymbolLocal(code);
     }, [selectedPreviewMarket, markets, shop.currencyCode, getCurrencySymbolLocal]);
 
