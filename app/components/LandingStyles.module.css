@@ -20,10 +20,15 @@
 }
 
 .logo {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #fff;
+  display: flex;
+  align-items: center;
   text-decoration: none;
+}
+
+.logoImage {
+  height: 28px;
+  width: auto;
+  object-fit: contain;
 }
 
 .navLinks { display: flex; gap: 2rem; align-items: center; }

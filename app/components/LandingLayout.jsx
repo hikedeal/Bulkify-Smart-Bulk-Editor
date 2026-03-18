@@ -5,7 +5,9 @@ export default function LandingLayout({ children }) {
   return (
     <div className={styles.wrapper}>
       <nav className={styles.nav}>
-        <Link to="/" className={styles.logo}>Bulkify</Link>
+        <Link to="/" className={styles.logo}>
+          <img src="/logo.png" alt="Bulkify" className={styles.logoImage} />
+        </Link>
         <div className={styles.navLinks}>
           <a href="/#features" className={styles.navLink}>Features</a>
           <Link to="/pricing" className={styles.navLink}>Pricing</Link>
@@ -21,7 +23,9 @@ export default function LandingLayout({ children }) {
       <footer className={styles.footer}>
         <div className={styles.footerGrid}>
           <div className={styles.footerBrand}>
-            <Link to="/" className={styles.logo}>Bulkify</Link>
+            <Link to="/" className={styles.logo}>
+              <img src="/logo.png" alt="Bulkify" className={styles.logoImage} />
+            </Link>
             <p>Empowering Shopify merchants with smarter data tools.</p>
           </div>
           <div className={styles.footerCol}>
