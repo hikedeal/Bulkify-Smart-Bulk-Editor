@@ -1,8 +1,17 @@
-import { Link } from "react-router";
+import { Link, redirect } from "react-router";
 import styles from "./styles.module.css";
 import LandingLayout from "../../components/LandingLayout";
 
-export default function Index() {
+export const loader = async ({ request }) => {
+  const url = new URL(request.url);
+  
+  // If Shopify hits this URL with an embedded session (shop param), redirect to the dashboard
+  if (url.searchParams.get("shop")) {
+    throw redirect(`/app?${url.searchParams.toString()}`);
+  }
+
+  return null;
+};export default function Index() {
   return (
     <LandingLayout>
       <div className={styles.index}>
