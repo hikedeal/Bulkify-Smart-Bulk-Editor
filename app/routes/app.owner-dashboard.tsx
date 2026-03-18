@@ -184,7 +184,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         prisma.shop.count({ where: { uninstalledAt: null, billingInterval: 'MONTHLY', OR: [{ planName: 'PRO' }, { plan: 'PRO' }, { planName: 'PRO_MONTHLY' }] } }),
         prisma.shop.count({ where: { uninstalledAt: null, billingInterval: 'YEARLY', OR: [{ planName: 'PRO' }, { plan: 'PRO' }, { planName: 'PRO_YEARLY' }] } }),
         prisma.shop.count({ where: { OR: [{ billingStatus: 'CANCELLED' }, { billingStatus: 'FROZEN' }, { AND: [{ plan: 'FREE' }, { uninstalledAt: { not: null } }] }] } }),
-        prisma.shop.aggregate({ where: { uninstalledAt: null, OR: [{ planName: 'PRO' }, { plan: 'PRO' }, { planName: { startsWith: 'PRO_' } }] }, _sum: { planPrice: true, totalSpent: true } }),
+        prisma.shop.aggregate({ where: { uninstalledAt: null, OR: [{ planName: 'PRO' }, { plan: 'PRO' }, { planName: { startsWith: 'PRO_' } }] }, _sum: { planPrice: true, totalSpent: true } }).catch(() => ({ _sum: { planPrice: 0, totalSpent: 0 } })),
         prisma.priceJob.count({ where: taskWhere }),
         prisma.priceJob.count({ where: { ...taskWhere, OR: [{ status: 'completed' }, { status: 'archived' }] } }),
         prisma.priceJob.count({ where: { ...taskWhere, status: 'failed' } }),
@@ -250,9 +250,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                 uninstalledAt: null,
                 OR: [{ planName: 'PRO' }, { plan: 'PRO' }, { planName: { startsWith: 'PRO_' } }]
             },
-            orderBy: { totalSpent: 'desc' },
+            orderBy: { createdAt: 'desc' },
             take: 10,
-            select: { shop: true, shopName: true, billingInterval: true, billingStatus: true, plan: true, planPrice: true, totalSpent: true, lastPaymentDate: true }
+            select: { shop: true, shopName: true, billingInterval: true, billingStatus: true, plan: true, planPrice: true, lastPaymentDate: true }
         }),
         prisma.shop.findMany({
             orderBy: { createdAt: 'desc' },

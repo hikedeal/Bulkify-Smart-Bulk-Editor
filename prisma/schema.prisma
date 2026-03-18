@@ -388,7 +388,7 @@ model AppEvent {
   metadata   Json?    @default("{}")
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
-  shop Shop @relation(fields: [shopDomain], references: [shop], onDelete: Cascade)
+  shop Shop? @relation(fields: [shopDomain], references: [shop], onDelete: Cascade)
 
   @@index([shopDomain, createdAt], map: "idx_app_events_shop_domain_created_at")
   @@index([eventName, createdAt], map: "idx_app_events_event_name_created_at")

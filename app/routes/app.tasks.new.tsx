@@ -753,9 +753,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const shop = session.shop;
 
     // Parallelize all data fetching
-    const [response, metafieldPresets, metafieldFavorites, metafieldRecent, shopSettings, planInfo, editJob, fallbackTagsResponse, productCountResponse] = await Promise.all([
+    const [response, metafieldPresets, metafieldFavorites, metafieldRecent, shopSettings, planInfo, editJob, fallbackTagsResponse] = await Promise.all([
         // 1. GraphQL Metadata
-        admin.graphql(
+        (async () => {
+            try {
+                return await admin.graphql(
             `#graphql
             query getMetadata {
                 markets(first: 25) {
@@ -825,7 +827,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                     }
                 }
             }`
-        ),
+                );
+            } catch (e) {
+                console.error("DEBUG LOADER: Metadata GraphQL error:", e);
+                return null;
+            }
+        })(),
 
         // 2. Metafield Presets
         prisma.metafieldPreset.findMany({
@@ -883,9 +890,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     const { plan: shopPlan, features: shopFeatures } = planInfo;
 
-
-
-    const responseJson = await response.json();
+    const responseJson = response ? await response.json() : { data: null };
     console.log("DEBUG LOADER: Metadata response:", JSON.stringify(responseJson.data?.productsCount));
 
     if (responseJson.errors) {
@@ -893,18 +898,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
 
     // Fetch available locations for inventory tasks
-    const locationsResponse = await admin.graphql(
-        `#graphql
-        query getLocations {
-            locations(first: 20) {
-                nodes {
-                    id
-                    name
+    let locationsData: any = { data: { locations: { nodes: [] } } };
+    try {
+        const locationsResponse = await admin.graphql(
+            `#graphql
+            query getLocations {
+                locations(first: 20) {
+                    nodes {
+                        id
+                        name
+                    }
                 }
-            }
-        }`
-    );
-    const locationsData = await locationsResponse.json() as any;
+            }`
+        );
+        locationsData = await locationsResponse.json();
+    } catch (e) {
+        console.error("DEBUG LOADER: Locations fetch failed:", e);
+    }
     const locations = locationsData.data?.locations?.nodes?.map((n: any) => ({ label: n.name, value: n.id })) || [];
 
     return {
@@ -912,7 +922,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         locations,
         markets: responseJson.data?.markets?.nodes || [],
         shop: responseJson.data?.shop || {},
-        productsCount: (() => { const c = responseJson.data?.productsCount?.count || 0; import('fs').then(fs => fs.appendFileSync('debug_log.txt', `\n[${new Date().toISOString()}] LOADER: Returning productsCount: ${c} from ${JSON.stringify(responseJson.data?.productsCount)}\n`)); return c; })(),
+        productsCount: responseJson.data?.productsCount?.count || 0,
         collections: responseJson.data?.collections?.nodes || [],
         productTypes: responseJson.data?.shop?.productTypes?.nodes || [],
         productVendors: responseJson.data?.shop?.productVendors?.nodes || [],

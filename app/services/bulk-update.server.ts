@@ -3207,9 +3207,14 @@ export async function revertJob(job: any) {
         }
 
         // Pre-fetch Location ID for inventory reverts
-        // We fetch it once if there are any inventory reverts needed
-        const locRes = await shopifyAdmin.graphql(`{ locations(first: 1) { nodes { id } } } `);
-        const locJson = await locRes.json() as any;
+        let locRes;
+        try {
+            locRes = await shopifyAdmin.graphql(`{ locations(first: 1) { nodes { id } } } `);
+        } catch (e) {
+            console.error("LOC_ERR", e);
+            locRes = { json: async () => ({ data: { locations: { nodes: [] } } }) };
+        }
+        const locJson = await (locRes as any).json() as any;
         const defaultLocationId = job.configuration?.locationId || locJson.data?.locations?.nodes?.[0]?.id;
 
         // Initialize collections for batching

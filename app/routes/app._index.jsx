@@ -71,7 +71,6 @@ export const loader = async ({ request }) => {
       shopRecord = await prisma.shop.create({
         data: {
           shop: shop,
-          shopDomain: shop,
           shopName: shopData.name,
           email: shopData.email,
           plan: "FREE",
