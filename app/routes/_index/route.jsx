@@ -40,23 +40,7 @@ export const loader = async ({ request }) => {
               <div className={styles.urlBar}>bulkify.co/dashboard</div>
             </div>
             <div className={styles.previewContent}>
-              <div className={styles.mockSidebar}>
-                 <div className={styles.mockBone}></div>
-                 <div className={styles.mockBone}></div>
-                 <div className={styles.mockBone}></div>
-              </div>
-              <div className={styles.mockMain}>
-                 <div className={styles.mockHeader}>
-                   <h2>Task Dashboard</h2>
-                   <div className={styles.mockAvatar}></div>
-                 </div>
-                 <div className={styles.mockTable}>
-                    <div className={styles.mockRow}></div>
-                    <div className={styles.mockRow}></div>
-                    <div className={styles.mockRow}></div>
-                    <div className={styles.mockRow}></div>
-                 </div>
-              </div>
+              <img src="/dashboard-preview.png" alt="Bulkify Dashboard" className={styles.dashboardImage} />
             </div>
           </div>
         </section>

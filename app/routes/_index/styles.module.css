@@ -242,60 +242,16 @@ h1, h2, h3, h4 {
 }
 
 .previewContent {
-  display: flex;
-  height: 480px;
+  display: block;
   background: rgba(248, 250, 252, 0.8);
-}
-
-.mockSidebar {
-  width: 220px;
-  border-right: 1px solid var(--border);
-  padding: 2rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.mockBone {
-  height: 24px;
-  background: var(--border);
-  border-radius: 4px;
   width: 100%;
 }
-.mockBone:nth-child(2) { width: 70%; }
-.mockBone:nth-child(3) { width: 85%; }
 
-.mockMain {
-  flex: 1;
-  padding: 2.5rem;
-}
-
-.mockHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
-
-.mockHeader h2 {
-  font-size: 1.5rem;
-}
-
-.mockAvatar {
-  width: 40px; height: 40px;
-  border-radius: 50%;
-  background: var(--border);
-}
-
-.mockTable {
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.mockRow {
-  height: 60px;
-  border-bottom: 1px solid var(--border);
+.dashboardImage {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
 }
 
 /* TRUSTED BY LOGOS */
