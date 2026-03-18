@@ -571,7 +571,7 @@ h1, h2, h3, h4 {
 }
 
 .saveBadge {
-  background: var(--red);
+  background: #ff3e6c;
   color: #fff;
   font-size: 0.75rem;
   padding: 0.25rem 0.75rem;
