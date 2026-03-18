@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import styles from "./styles.module.css";
-import LandingLayout from "../components/LandingLayout";
+import LandingLayout from "../../components/LandingLayout";
 
 export default function Index() {
   return (
