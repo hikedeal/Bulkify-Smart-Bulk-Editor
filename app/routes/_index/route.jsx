@@ -1,4 +1,5 @@
 import { Link, redirect } from "react-router";
+import { useState } from "react";
 import styles from "./styles.module.css";
 import LandingLayout from "../../components/LandingLayout";
 
@@ -11,7 +12,11 @@ export const loader = async ({ request }) => {
   }
 
   return null;
-};export default function Index() {
+};
+
+export default function Index() {
+  const [billingCycle, setBillingCycle] = useState("monthly");
+
   return (
     <LandingLayout>
       <div className={styles.index}>
@@ -155,6 +160,24 @@ export const loader = async ({ request }) => {
             <span className={styles.sectionLabel}>PRICING</span>
             <h2 className={styles.sectionTitle}>Simple, transparent pricing</h2>
           </div>
+
+          <div className={styles.billingToggleWrapper}>
+             <div className={styles.billingToggle}>
+               <button 
+                 onPointerDown={() => setBillingCycle("monthly")}
+                 className={billingCycle === "monthly" ? styles.activeToggle : ""}
+               >
+                 Monthly
+               </button>
+               <button 
+                 onPointerDown={() => setBillingCycle("yearly")}
+                 className={billingCycle === "yearly" ? styles.activeToggle : ""}
+               >
+                 Yearly <span className={styles.saveBadge}>Save $30</span>
+               </button>
+             </div>
+          </div>
+
           <div className={styles.pricingGrid}>
             <div className={styles.priceCard}>
               <h4>FREE</h4>
@@ -164,7 +187,10 @@ export const loader = async ({ request }) => {
             </div>
             <div className={`${styles.priceCard} ${styles.featured}`}>
               <h4>PRO</h4>
-              <div className={styles.priceVal}>$15<span>/mo</span></div>
+              <div className={styles.priceVal}>
+                {billingCycle === "monthly" ? "$15" : "$150"}
+                <span>{billingCycle === "monthly" ? "/mo" : "/yr"}</span>
+              </div>
               <div className={styles.featureItem}>✓ Unlimited Edits</div>
               <div className={styles.featureItem}>✓ Smart Rounding</div>
               <div className={styles.featureItem}>✓ Priority Support</div>
