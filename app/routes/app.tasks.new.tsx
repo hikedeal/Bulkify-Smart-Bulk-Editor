@@ -3368,17 +3368,11 @@ export default function CreateTaskPage() {
                                                         selectedTags={editValue ? editValue.split(",").filter(Boolean) : []}
                                                         onChange={(tags) => {
                                                             const newVal = tags.join(",");
-                                                            console.log("DEBUG: Setting editValue to:", newVal);
                                                             setEditValue(newVal);
                                                         }}
                                                         availableTags={productTags}
                                                         placeholder="Search or add tags"
                                                     />
-                                                    <Box paddingBlockStart="100">
-                                                        <Text as="p" variant="bodyXs" tone="subdued">
-                                                            DEBUG: editValue = "{editValue}" ({editValue.split(",").filter(Boolean).length} tags)
-                                                        </Text>
-                                                    </Box>
                                                 </>
                                             ) : (fieldToEdit === 'requires_shipping' || fieldToEdit === 'taxable') ? (
                                                 <Select
