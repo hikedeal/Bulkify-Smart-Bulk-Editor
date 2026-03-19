@@ -610,6 +610,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                         startTime: new Date(startIso),
                         endTime: endIso ? new Date(endIso) : null,
                         configuration: configuration as any,
+                        previewJson: formData.get("previewJson") ? JSON.parse(formData.get("previewJson") as string) : undefined,
                         note: note,
                     }
                 });
@@ -656,6 +657,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
                     endTime: endIso ? new Date(endIso) : null,
                     configuration: configuration as any,
                     note: note,
+                    previewJson: formData.get("previewJson") ? JSON.parse(formData.get("previewJson") as string) : [],
                     revertStatus: isScheduledRevert ? "scheduled" : null,
                     scheduledRevertAt: isScheduledRevert && revertDateTime ? new Date(revertDateTime) : null,
                     totalProducts: productsCount
@@ -893,7 +895,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     const { plan: shopPlan, features: shopFeatures } = planInfo;
 
-    const responseJson = response ? await response.json() : { data: null };
+    const responseJson: any = response ? await response.json() : { data: null };
     console.log("DEBUG LOADER: Metadata response:", JSON.stringify(responseJson.data?.productsCount));
 
     if (responseJson.errors) {
@@ -1673,6 +1675,136 @@ export default function CreateTaskPage() {
         return inputValue;
     }, [findText, replaceText]);
 
+    const applyRounding = (value: number, method: string, rVal?: string): string => {
+        if (method === 'none') return value.toFixed(2);
+        if (method === 'nearest_01') return (Math.round(value * 100) / 100).toFixed(2);
+        if (method === 'nearest_whole') return Math.round(value).toFixed(2);
+        if (method === 'nearest_99') return (Math.floor(value) + 0.99).toFixed(2);
+        if (method === 'custom_ending') {
+            let decimalPart = 0.99;
+            if (rVal) {
+                const parsed = parseFloat(rVal);
+                if (!isNaN(parsed)) {
+                    // If they enter 95, it becomes 0.95. If they enter .95, it remains 0.95.
+                    decimalPart = parsed > 1 ? parsed / 100 : parsed;
+                }
+            }
+            return (Math.floor(value) + decimalPart).toFixed(2);
+        }
+        return value.toFixed(2);
+    };
+
+    const calculateNewValue = useCallback((original: number | string, context?: { price?: string | number, compareAtPrice?: string | number, cost?: string | number }) => {
+        const numOriginal = parseFloat(original as string) || 0;
+        const numEditValue = parseFloat(editValue) || 0;
+        let newVal = numOriginal;
+
+        if (editMethod === 'fixed') newVal = numEditValue;
+        else if (editMethod === 'percentage_inc') newVal = numOriginal * (1 + numEditValue / 100);
+        else if (editMethod === 'percentage_dec') newVal = numOriginal * (1 - numEditValue / 100);
+        else if (editMethod === 'amount_inc') newVal = numOriginal + numEditValue;
+        else if (editMethod === 'amount_dec') newVal = numOriginal - numEditValue;
+        const numPrice = (fieldToEdit === 'price') ? numOriginal : (parseFloat(context?.price as string) || 0);
+        const numCompareAt = parseFloat(context?.compareAtPrice as string) || 0;
+        const numCost = parseFloat(context?.cost as string) || 0;
+
+        if (editMethod === 'percentage_of_price') {
+            newVal = numPrice * (numEditValue / 100);
+        }
+        else if (editMethod === 'set_to_compare_at') newVal = numCompareAt;
+        else if (editMethod === 'percentage_of_compare_at') newVal = numCompareAt * (numEditValue / 100);
+        else if (editMethod === 'set_to_cost') newVal = numCost;
+        else if (editMethod === 'percentage_of_cost') newVal = numCost * (numEditValue / 100);
+        else if (editMethod === 'set_to_price') newVal = numPrice;
+
+        if (['price', 'compare_price', 'cost'].includes(fieldToEdit)) {
+            return applyRounding(newVal, rounding, roundingValue);
+        }
+
+        return newVal.toString();
+    }, [editMethod, editValue, rounding, roundingValue, fieldToEdit]);
+
+    const calculateNewCompareAt = useCallback((compareAt: number | string, context: { price: string | number, cost?: string | number }) => {
+        if (compareAtPriceOption === 'none') return "";
+        if (compareAtPriceOption === 'null') return "";
+
+        const numCompareAt = parseFloat(compareAt as string) || 0;
+        const numPrice = parseFloat(context.price as string) || 0;
+        const numCost = parseFloat(context.cost as string) || 0;
+        const numEditValue = parseFloat(compareAtEditValue) || 0;
+
+        let newVal = numCompareAt;
+
+        if (compareAtEditMethod === 'fixed') newVal = numEditValue;
+        else if (compareAtEditMethod === 'amount_inc') newVal = numCompareAt + numEditValue;
+        else if (compareAtEditMethod === 'amount_dec') newVal = numCompareAt - numEditValue;
+        else if (compareAtEditMethod === 'percentage_inc') newVal = numCompareAt * (1 + numEditValue / 100);
+        else if (compareAtEditMethod === 'percentage_dec') newVal = numCompareAt * (1 - numEditValue / 100);
+        else if (compareAtEditMethod === 'set_to_price') newVal = numPrice;
+        else if (compareAtEditMethod === 'percentage_of_price') newVal = numPrice * (numEditValue / 100);
+        else if (compareAtEditMethod === 'percentage_of_compare_at') newVal = numCompareAt * (numEditValue / 100);
+        else if (compareAtEditMethod === 'set_to_cost') newVal = numCost;
+        else if (compareAtEditMethod === 'percentage_of_cost') newVal = numCost * (numEditValue / 100);
+        else if (compareAtEditMethod === 'set_to_null') return "";
+
+        if (compareAtPriceOption !== 'none' && compareAtPriceOption !== 'null') {
+            return applyRounding(newVal, rounding, roundingValue);
+        }
+
+        return newVal < 0 ? "0.00" : newVal.toFixed(2);
+    }, [compareAtPriceOption, compareAtEditValue, compareAtEditMethod, rounding, roundingValue]);
+
+    const calculateNewPrice = useCallback((currentPrice: number | string, context: { compareAtPrice?: string | number, cost?: string | number }) => {
+        if (fieldToEdit !== 'compare_price' || priceOption === 'set') return "";
+
+        const numPrice = parseFloat(currentPrice as string) || 0;
+        const numCompareAt = parseFloat(context.compareAtPrice as string) || 0;
+        const numCost = parseFloat(context.cost as string) || 0;
+        const numEditValue = parseFloat(priceEditValue) || 0;
+
+        let newVal = numPrice;
+
+        if (priceEditMethod === 'fixed') newVal = numEditValue;
+        else if (priceEditMethod === 'amount_inc') newVal = numPrice + numEditValue;
+        else if (priceEditMethod === 'amount_dec') newVal = numPrice - numEditValue;
+        else if (priceEditMethod === 'percentage_inc') newVal = numPrice * (1 + numEditValue / 100);
+        else if (priceEditMethod === 'percentage_dec') newVal = numPrice * (1 - numEditValue / 100);
+        else if (priceEditMethod === 'set_to_compare_at') newVal = numCompareAt;
+        else if (priceEditMethod === 'percentage_of_compare_at') newVal = numCompareAt * (numEditValue / 100);
+        else if (priceEditMethod === 'set_to_cost') newVal = numCost;
+        else if (priceEditMethod === 'percentage_of_cost') newVal = numCost * (numEditValue / 100);
+
+        if (priceOption === 'set') {
+            return applyRounding(newVal, rounding, roundingValue);
+        }
+
+        return newVal < 0 ? "0.00" : newVal.toFixed(2);
+    }, [fieldToEdit, priceOption, priceEditValue, priceEditMethod, rounding, roundingValue]);
+
+    const applyTextEdit = (originalText: string, method: string, inputs: { value?: string, findText?: string, replaceText?: string, prefixValue?: string, suffixValue?: string }) => {
+        const original = originalText || "";
+        switch (method) {
+            case 'set_vendor':
+            case 'set_type':
+            case 'fixed':
+                return inputs.value || "";
+            case 'clear_value':
+            case 'clear_vendor':
+            case 'clear_type':
+                return "";
+            case 'add_prefix':
+                return (inputs.prefixValue || "") + original;
+            case 'add_suffix':
+                return original + (inputs.suffixValue || "");
+            case 'find_replace':
+            case 'replace_text':
+                if (!inputs.findText) return original;
+                return original.split(inputs.findText).join(inputs.replaceText || "");
+            default:
+                return original;
+        }
+    };
+
     // Auto-select created definition
     useEffect(() => {
         if (createDefFetcher.state === "idle" && createDefFetcher.data?.ok && createDefFetcher.data?.definition) {
@@ -2271,6 +2403,196 @@ export default function CreateTaskPage() {
         fetcher.submit(formData, { method: "POST", action: "/app/preview-data" });
     }, [applyToProducts, selectedProducts, selectedCollections, productConditions, productMatchLogic, applyToVariants, variantConditions, variantMatchLogic, fetcher.submit, fieldToEdit, locationId, metafieldNamespace, metafieldKey, metafieldTargetType, excludeSpecificProducts, excludedProductsList, selectedPreviewMarket, markets]);
 
+    const showSidebarTags = (addTags && (tagsToAdd || []).length > 0) || (removeTags && (tagsToRemove || []).length > 0);
+
+    const rows = useMemo(() => {
+        const products = fetcher.data?.products || [];
+        const market = selectedPreviewMarket;
+        if (!products.length || market === 'empty') return [];
+
+        // Safety net: deduplicate input products by ID
+        const uniqueProductsMap = new Map();
+        products.forEach((p: any) => {
+            if (!uniqueProductsMap.has(p.id)) {
+                uniqueProductsMap.set(p.id, p);
+            }
+        });
+        const uniqueProducts = Array.from(uniqueProductsMap.values());
+
+        return uniqueProducts.flatMap((p: any) => {
+            // Calculation logic unified for single and multiple variants
+            const getRowData = (variant: any) => {
+                const v = variant || {};
+                let originalV = v.price || "0.00";
+                let originalCompareV = v.compareAtPrice || "0.00";
+                let updateV = fieldToEdit === 'compare_price'
+                    ? (priceOption === 'set' ? calculateNewPrice(v.price || "0", { compareAtPrice: v.compareAtPrice, cost: v.cost }) : originalV)
+                    : calculateNewValue(v.price || "0", { compareAtPrice: v.compareAtPrice, cost: v.cost });
+                let updateCompareV = fieldToEdit === 'compare_price'
+                    ? calculateNewValue(v.compareAtPrice || "0", { price: v.price, compareAtPrice: v.compareAtPrice, cost: v.cost })
+                    : calculateNewCompareAt(v.compareAtPrice, { price: v.price, cost: v.cost });
+
+                let originalVal = "";
+                let updateVal = "";
+
+                if (fieldToEdit === 'inventory') {
+                    originalVal = v.inventory?.toString() || "0";
+                    updateVal = editMethod === 'fixed' ? (parseInt(editValue) || 0).toString() : calculateNewValue(originalVal);
+                } else if (fieldToEdit === 'cost') {
+                    originalVal = v.cost || "0.00";
+                    updateVal = calculateNewValue(originalVal, { price: v.price, compareAtPrice: v.compareAtPrice, cost: v.cost });
+                    originalV = v.price || "0.00";
+                    originalCompareV = v.compareAtPrice || "0.00";
+                } else if (fieldToEdit === 'status') {
+                    originalVal = p.status;
+                    updateVal = editMethod === 'fixed' ? (editValue || "ACTIVE") : originalVal;
+                } else if (fieldToEdit === 'weight') {
+                    originalVal = `${v.weight} ${v.weightUnit || ""}`;
+                    let newWeight = parseFloat(v.weight || "0");
+                    const editValNum = parseFloat(editValue || "0");
+                    if (editMethod === 'fixed') newWeight = editValNum;
+                    else if (editMethod === 'amount_inc') newWeight += editValNum;
+                    else if (editMethod === 'amount_dec') newWeight -= editValNum;
+
+                    const targetUnit = weightUnit || v.weightUnit || "kg";
+                    updateVal = `${newWeight.toFixed(3)} ${targetUnit}`;
+                } else if (fieldToEdit === 'vendor') {
+                    originalVal = p.vendor;
+                    updateVal = applyTextEdit(originalVal, editMethod, {
+                        value: editValue,
+                        findText: findText,
+                        replaceText: replaceText,
+                        prefixValue: editValue,
+                        suffixValue: editValue
+                    });
+                } else if (fieldToEdit === 'product_type') {
+                    originalVal = p.productType;
+                    updateVal = applyTextEdit(originalVal, editMethod, {
+                        value: editValue,
+                        findText: findText,
+                        replaceText: replaceText,
+                        prefixValue: editValue,
+                        suffixValue: editValue
+                    });
+                } else if (fieldToEdit === 'requires_shipping') {
+                    originalVal = v.requiresShipping ? "True" : "False";
+                    updateVal = String(editValue).toLowerCase() === 'true' ? "True" : "False";
+                } else if (fieldToEdit === 'taxable') {
+                    originalVal = v.taxable ? "True" : "False";
+                    updateVal = String(editValue).toLowerCase() === 'true' ? "True" : "False";
+                } else if (fieldToEdit === 'metafield') {
+                    const target = metafieldTargetType === 'product' ? p : v;
+                    // Find the metafield in the edges array
+                    const metafieldEdge = target.metafields?.edges?.find((e: any) =>
+                        e.node.namespace === metafieldNamespace && e.node.key === metafieldKey
+                    );
+                    originalVal = metafieldEdge?.node?.value || "";
+                    updateVal = calculateUpdatedMetafieldValue({
+                        originalValue: originalVal,
+                        type: metafieldType,
+                        editMethod,
+                        inputValue: editValue
+                    });
+                } else if (fieldToEdit === 'price') {
+                    originalVal = v.price;
+                    updateVal = updateV;
+                } else if (fieldToEdit === 'compare_price') {
+                    originalVal = v.compareAtPrice || "";
+                    updateVal = calculateNewValue(originalVal || "0", { price: v.price, compareAtPrice: v.compareAtPrice, cost: v.cost });
+                }
+
+                // Handle tags (both for main field and sidebar)
+                let tagsOriginal = "";
+                let tagsUpdated = "";
+                
+                // Fetch product-level tags as they are global for all variants
+                const currentTags = Array.isArray(p.tags) ? p.tags : (typeof p.tags === 'string' ? (p.tags as string).split(",").map((t: string) => t.trim()).filter(Boolean) : []);
+                tagsOriginal = currentTags.join(", ");
+                let newTagsList = [...currentTags];
+
+                if (fieldToEdit === 'tags') {
+                    const tagsToProcess = (editValue || "").split(",").filter(Boolean).map((t: string) => t.trim());
+                    if (editMethod === 'add_tags') {
+                        newTagsList = Array.from(new Set([...newTagsList, ...tagsToProcess]));
+                    } else if (editMethod === 'remove_tags') {
+                        newTagsList = newTagsList.filter(t => !tagsToProcess.includes(t));
+                    } else if (editMethod === 'replace_tags') {
+                        newTagsList = tagsToProcess;
+                    }
+                    originalVal = tagsOriginal;
+                    updateVal = newTagsList.join(", ");
+                }
+
+                if (showSidebarTags) {
+                    if (addTags && (tagsToAdd || []).length > 0) {
+                        newTagsList = Array.from(new Set([...newTagsList, ...(tagsToAdd || [])]));
+                    }
+                    if (removeTags && (tagsToRemove || []).length > 0) {
+                        const toRemove = tagsToRemove || [];
+                        newTagsList = newTagsList.filter(t => !toRemove.includes(t));
+                    }
+                }
+                
+                tagsUpdated = newTagsList.join(", ");
+
+                return {
+                    originalPrice: v.price,
+                    updatePrice: updateV,
+                    originalComparePrice: v.compareAtPrice || "",
+                    updateComparePrice: updateCompareV,
+                    originalCost: v.cost || "0.00",
+                    originalVal,
+                    updateVal,
+                    tagsOriginal,
+                    tagsUpdated
+                };
+            };
+
+            if (!p.variants || p.variants.length <= 1 || fieldToEdit === 'tags') {
+                const v = p.variants?.[0] || {};
+                const data = getRowData(v);
+                return [{
+                    id: v.id || p.id,
+                    image: p.image,
+                    product: p.title,
+                    ...data,
+                    isParent: false,
+                    isVariant: false
+                }];
+            }
+
+            const parentRecordData = getRowData(p.variants[0]);
+            const parentRow = {
+                id: p.id,
+                image: p.image,
+                product: p.title,
+                isParent: true,
+                originalPrice: "",
+                updatePrice: "",
+                originalComparePrice: "",
+                updateComparePrice: "",
+                originalVal: (['tags', 'status', 'vendor', 'product_type', 'requires_shipping', 'taxable'].includes(fieldToEdit) || (fieldToEdit === 'metafield' && metafieldTargetType === 'product')) ? parentRecordData.originalVal : "",
+                updateVal: (['tags', 'status', 'vendor', 'product_type', 'requires_shipping', 'taxable'].includes(fieldToEdit) || (fieldToEdit === 'metafield' && metafieldTargetType === 'product')) ? parentRecordData.updateVal : ""
+            };
+
+            const variantRows = p.variants.map((v: any) => {
+                const data = getRowData(v);
+                return {
+                    id: v.id,
+                    image: null,
+                    product: v.title,
+                    ...data,
+                    // Use the tags data from the current variant's record
+                    tagsOriginal: data.tagsOriginal,
+                    tagsUpdated: data.tagsUpdated,
+                    isVariant: true
+                };
+            });
+
+            return [parentRow, ...variantRows];
+        });
+    }, [fetcher.data?.products, selectedPreviewMarket, fieldToEdit, priceOption, editMethod, editValue, rounding, roundingValue, metafieldType, metafieldTargetType, metafieldNamespace, metafieldKey, weightUnit, findText, replaceText, calculateNewValue, calculateNewCompareAt, calculateNewPrice, calculateUpdatedMetafieldValue, showSidebarTags, addTags, tagsToAdd, removeTags, tagsToRemove]);
+
     // Refresh when critical selection changes
     useEffect(() => {
         const hasSelection = applyToProducts === 'all' || applyToProducts === 'conditions' || selectedProducts.length > 0 || selectedCollections.length > 0;
@@ -2325,7 +2647,7 @@ export default function CreateTaskPage() {
         }
     }, [actionData]);
 
-    const handleCreateTask = () => {
+    function handleCreateTask() {
         // Validation
         if (applyToProducts === 'specific' && selectedProducts.length === 0) {
             window.shopify.toast.show("Please select at least one product", { isError: true });
@@ -2394,6 +2716,10 @@ export default function CreateTaskPage() {
         formData.append("note", note);
         console.log("DEBUG FRONTEND: Submitting productsCount:", productsCount);
         console.log("DEBUG FRONTEND productsCount:", productsCount); formData.append("productsCount", productsCount.toString());
+        
+        // Save first 100 rows as initial previewJson
+        const previewSample = rows.filter((r: any) => !r.isVariant).slice(0, 100);
+        formData.append("previewJson", JSON.stringify(previewSample));
 
         if (editJob?.job_id) {
             formData.append("editJobId", editJob.job_id.toString());
@@ -2401,7 +2727,8 @@ export default function CreateTaskPage() {
 
         submit(formData, { method: "post" });
         setIsModalOpen(false);
-    };
+    }
+
 
     return (
         <Page
@@ -3032,12 +3359,23 @@ export default function CreateTaskPage() {
                                                     onChange={setEditValue}
                                                 />
                                             ) : fieldToEdit === 'tags' ? (
-                                                <MultiTagSelect
-                                                    selectedTags={editValue ? editValue.split(",").filter(Boolean) : []}
-                                                    onChange={(tags) => setEditValue(tags.join(","))}
-                                                    availableTags={productTags}
-                                                    placeholder="Search or add tags"
-                                                />
+                                                <>
+                                                    <MultiTagSelect
+                                                        selectedTags={editValue ? editValue.split(",").filter(Boolean) : []}
+                                                        onChange={(tags) => {
+                                                            const newVal = tags.join(",");
+                                                            console.log("DEBUG: Setting editValue to:", newVal);
+                                                            setEditValue(newVal);
+                                                        }}
+                                                        availableTags={productTags}
+                                                        placeholder="Search or add tags"
+                                                    />
+                                                    <Box paddingBlockStart="100">
+                                                        <Text as="p" variant="bodyXs" tone="subdued">
+                                                            DEBUG: editValue = "{editValue}" ({editValue.split(",").filter(Boolean).length} tags)
+                                                        </Text>
+                                                    </Box>
+                                                </>
                                             ) : (fieldToEdit === 'requires_shipping' || fieldToEdit === 'taxable') ? (
                                                 <Select
                                                     label="Value"
@@ -4099,6 +4437,7 @@ export default function CreateTaskPage() {
                                                 tagsToAdd={tagsToAdd}
                                                 removeTags={removeTags}
                                                 tagsToRemove={tagsToRemove}
+                                                rows={rows}
                                             />
                                         </div>
                                         <Box padding="400">
@@ -4297,7 +4636,8 @@ function PreviewTable({
     addTags,
     tagsToAdd,
     removeTags,
-    tagsToRemove
+    tagsToRemove,
+    rows
 }: {
     market: string,
     markets: any[],
@@ -4326,9 +4666,10 @@ function PreviewTable({
     addTags?: boolean,
     tagsToAdd?: string[],
     removeTags?: boolean,
-    tagsToRemove?: string[]
+    tagsToRemove?: string[],
+    rows: any[]
 }) {
-    // Dynamic Columns Configuration
+    // Dynamic Columns Configuration (RESTORED)
     let columns: any[] = [
         { title: "Image" },
         { title: "Product" },
@@ -4451,8 +4792,7 @@ function PreviewTable({
             { title: `New ${fieldToEdit}` }
         ];
     }
-
-    const showSidebarTags = (addTags && tagsToAdd && tagsToAdd.length > 0) || (removeTags && tagsToRemove && tagsToRemove.length > 0);
+    const showSidebarTags = (addTags && (tagsToAdd || []).length > 0) || (removeTags && (tagsToRemove || []).length > 0);
     if (showSidebarTags && fieldToEdit !== 'tags') {
         columns.push({ title: "Tags (Original)" });
         columns.push({ title: "Tags (Updated)" });
@@ -4463,314 +4803,6 @@ function PreviewTable({
         return products.some((p: any) => p.tagsUpdated !== undefined);
     }, [products]);
 
-
-
-    const applyRounding = (value: number, method: string, rVal?: string): string => {
-        if (method === 'none') return value.toFixed(2);
-        if (method === 'nearest_01') return (Math.round(value * 100) / 100).toFixed(2);
-        if (method === 'nearest_whole') return Math.round(value).toFixed(2);
-        if (method === 'nearest_99') return (Math.floor(value) + 0.99).toFixed(2);
-        if (method === 'custom_ending') {
-            let decimalPart = 0.99;
-            if (rVal) {
-                const parsed = parseFloat(rVal);
-                if (!isNaN(parsed)) {
-                    // If they enter 95, it becomes 0.95. If they enter .95, it remains 0.95.
-                    decimalPart = parsed > 1 ? parsed / 100 : parsed;
-                }
-            }
-            return (Math.floor(value) + decimalPart).toFixed(2);
-        }
-        return value.toFixed(2);
-    };
-
-    const calculateNewValue = useCallback((original: number | string, context?: { price?: string | number, compareAtPrice?: string | number, cost?: string | number }) => {
-        const numOriginal = parseFloat(original as string) || 0;
-        const numEditValue = parseFloat(editValue) || 0;
-        let newVal = numOriginal;
-
-        if (editMethod === 'fixed') newVal = numEditValue;
-        else if (editMethod === 'percentage_inc') newVal = numOriginal * (1 + numEditValue / 100);
-        else if (editMethod === 'percentage_dec') newVal = numOriginal * (1 - numEditValue / 100);
-        else if (editMethod === 'amount_inc') newVal = numOriginal + numEditValue;
-        else if (editMethod === 'amount_dec') newVal = numOriginal - numEditValue;
-        const numPrice = (fieldToEdit === 'price') ? numOriginal : (parseFloat(context?.price as string) || 0);
-        const numCompareAt = parseFloat(context?.compareAtPrice as string) || 0;
-        const numCost = parseFloat(context?.cost as string) || 0;
-
-        if (editMethod === 'percentage_of_price') {
-            newVal = numPrice * (numEditValue / 100);
-        }
-        else if (editMethod === 'set_to_compare_at') newVal = numCompareAt;
-        else if (editMethod === 'percentage_of_compare_at') newVal = numCompareAt * (numEditValue / 100);
-        else if (editMethod === 'set_to_cost') newVal = numCost;
-        else if (editMethod === 'percentage_of_cost') newVal = numCost * (numEditValue / 100);
-        else if (editMethod === 'set_to_price') newVal = numPrice;
-
-        if (['price', 'compare_price', 'cost'].includes(fieldToEdit)) {
-            return applyRounding(newVal, rounding, roundingValue);
-        }
-
-        return newVal.toString();
-    }, [editMethod, editValue, rounding, roundingValue, fieldToEdit]);
-
-    const calculateNewCompareAt = useCallback((compareAt: number | string, context: { price: string | number, cost?: string | number }) => {
-        if (compareAtPriceOption === 'none') return "";
-        if (compareAtPriceOption === 'null') return "";
-
-        const numCompareAt = parseFloat(compareAt as string) || 0;
-        const numPrice = parseFloat(context.price as string) || 0;
-        const numCost = parseFloat(context.cost as string) || 0;
-        const numEditValue = parseFloat(compareAtEditValue) || 0;
-
-        let newVal = numCompareAt;
-
-        if (compareAtEditMethod === 'fixed') newVal = numEditValue;
-        else if (compareAtEditMethod === 'amount_inc') newVal = numCompareAt + numEditValue;
-        else if (compareAtEditMethod === 'amount_dec') newVal = numCompareAt - numEditValue;
-        else if (compareAtEditMethod === 'percentage_inc') newVal = numCompareAt * (1 + numEditValue / 100);
-        else if (compareAtEditMethod === 'percentage_dec') newVal = numCompareAt * (1 - numEditValue / 100);
-        else if (compareAtEditMethod === 'set_to_price') newVal = numPrice;
-        else if (compareAtEditMethod === 'percentage_of_price') newVal = numPrice * (numEditValue / 100);
-        else if (compareAtEditMethod === 'percentage_of_compare_at') newVal = numCompareAt * (numEditValue / 100);
-        else if (compareAtEditMethod === 'set_to_cost') newVal = numCost;
-        else if (compareAtEditMethod === 'percentage_of_cost') newVal = numCost * (numEditValue / 100);
-        else if (compareAtEditMethod === 'set_to_null') return "";
-
-        if (compareAtPriceOption !== 'none' && compareAtPriceOption !== 'null') {
-            return applyRounding(newVal, rounding, roundingValue);
-        }
-
-        return newVal < 0 ? "0.00" : newVal.toFixed(2);
-    }, [compareAtPriceOption, compareAtEditValue, compareAtEditMethod, rounding, roundingValue]);
-
-    const calculateNewPrice = useCallback((currentPrice: number | string, context: { compareAtPrice?: string | number, cost?: string | number }) => {
-        if (fieldToEdit !== 'compare_price' || priceOption !== 'set') return "";
-
-        const numPrice = parseFloat(currentPrice as string) || 0;
-        const numCompareAt = parseFloat(context.compareAtPrice as string) || 0;
-        const numCost = parseFloat(context.cost as string) || 0;
-        const numEditValue = parseFloat(priceEditValue) || 0;
-
-        let newVal = numPrice;
-
-        if (priceEditMethod === 'fixed') newVal = numEditValue;
-        else if (priceEditMethod === 'amount_inc') newVal = numPrice + numEditValue;
-        else if (priceEditMethod === 'amount_dec') newVal = numPrice - numEditValue;
-        else if (priceEditMethod === 'percentage_inc') newVal = numPrice * (1 + numEditValue / 100);
-        else if (priceEditMethod === 'percentage_dec') newVal = numPrice * (1 - numEditValue / 100);
-        else if (priceEditMethod === 'set_to_compare_at') newVal = numCompareAt;
-        else if (priceEditMethod === 'percentage_of_compare_at') newVal = numCompareAt * (numEditValue / 100);
-        else if (priceEditMethod === 'set_to_cost') newVal = numCost;
-        else if (priceEditMethod === 'percentage_of_cost') newVal = numCost * (numEditValue / 100);
-
-        if (priceOption === 'set') {
-            return applyRounding(newVal, rounding, roundingValue);
-        }
-
-        return newVal < 0 ? "0.00" : newVal.toFixed(2);
-    }, [fieldToEdit, priceOption, priceEditValue, priceEditMethod, rounding, roundingValue]);
-
-    const applyTextEdit = (originalText: string, method: string, inputs: { value?: string, findText?: string, replaceText?: string, prefixValue?: string, suffixValue?: string }) => {
-        const original = originalText || "";
-        switch (method) {
-            case 'set_vendor':
-            case 'set_type':
-            case 'fixed':
-                return inputs.value || "";
-            case 'clear_value':
-            case 'clear_vendor':
-            case 'clear_type':
-                return "";
-            case 'add_prefix':
-                return (inputs.prefixValue || "") + original;
-            case 'add_suffix':
-                return original + (inputs.suffixValue || "");
-            case 'find_replace':
-            case 'replace_text':
-                if (!inputs.findText) return original;
-                return original.split(inputs.findText).join(inputs.replaceText || "");
-            default:
-                return original;
-        }
-    };
-
-    const rows = useMemo(() => {
-        if (!products.length || market === 'empty') return [];
-
-        // Safety net: deduplicate input products by ID
-        const uniqueProductsMap = new Map();
-        products.forEach(p => {
-            if (!uniqueProductsMap.has(p.id)) {
-                uniqueProductsMap.set(p.id, p);
-            }
-        });
-        const uniqueProducts = Array.from(uniqueProductsMap.values());
-
-        return uniqueProducts.flatMap((p) => {
-            // Calculation logic unified for single and multiple variants
-            const getRowData = (variant: any) => {
-                const v = variant || {};
-                let originalV = v.price || "0.00";
-                let originalCompareV = v.compareAtPrice || "0.00";
-                let updateV = fieldToEdit === 'compare_price'
-                    ? (priceOption === 'set' ? calculateNewPrice(v.price || "0", { compareAtPrice: v.compareAtPrice, cost: v.cost }) : originalV)
-                    : calculateNewValue(v.price || "0", { compareAtPrice: v.compareAtPrice, cost: v.cost });
-                let updateCompareV = fieldToEdit === 'compare_price'
-                    ? calculateNewValue(v.compareAtPrice || "0", { price: v.price, compareAtPrice: v.compareAtPrice, cost: v.cost })
-                    : calculateNewCompareAt(v.compareAtPrice, { price: v.price, cost: v.cost });
-
-                let originalVal = "";
-                let updateVal = "";
-
-                if (fieldToEdit === 'inventory') {
-                    originalVal = v.inventory?.toString() || "0";
-                    updateVal = editMethod === 'fixed' ? (parseInt(editValue) || 0).toString() : calculateNewValue(originalVal);
-                } else if (fieldToEdit === 'cost') {
-                    originalVal = v.cost || "0.00";
-                    updateVal = calculateNewValue(originalVal, { price: v.price, compareAtPrice: v.compareAtPrice, cost: v.cost });
-                    originalV = v.price || "0.00";
-                    originalCompareV = v.compareAtPrice || "0.00";
-                } else if (fieldToEdit === 'status') {
-                    originalVal = p.status;
-                    updateVal = editMethod === 'fixed' ? (editValue || "ACTIVE") : originalVal;
-                } else if (fieldToEdit === 'tags') {
-                    const currentTags = p.tags || [];
-                    originalVal = currentTags.join(", ");
-                    const tagsToProcess = editValue.split(",").filter(Boolean).map((t: string) => t.trim());
-                    let newTags = [...currentTags];
-                    if (editMethod === 'add_tags') newTags = Array.from(new Set([...newTags, ...tagsToProcess]));
-                    else if (editMethod === 'remove_tags') newTags = newTags.filter(t => !tagsToProcess.includes(t));
-                    else if (editMethod === 'replace_tags') newTags = tagsToProcess;
-                    updateVal = newTags.join(", ");
-                } else if (fieldToEdit === 'weight') {
-                    originalVal = `${v.weight} ${v.weightUnit || ""}`;
-                    let newWeight = parseFloat(v.weight || "0");
-                    const editValNum = parseFloat(editValue || "0");
-                    if (editMethod === 'fixed') newWeight = editValNum;
-                    else if (editMethod === 'amount_inc') newWeight += editValNum;
-                    else if (editMethod === 'amount_dec') newWeight -= editValNum;
-
-                    const targetUnit = weightUnit || v.weightUnit || "kg";
-                    updateVal = `${newWeight.toFixed(3)} ${targetUnit}`;
-                } else if (fieldToEdit === 'vendor') {
-                    originalVal = p.vendor;
-                    updateVal = applyTextEdit(originalVal, editMethod, {
-                        value: editValue,
-                        findText: findText,
-                        replaceText: replaceText,
-                        prefixValue: editValue,
-                        suffixValue: editValue
-                    });
-                } else if (fieldToEdit === 'product_type') {
-                    originalVal = p.productType;
-                    updateVal = applyTextEdit(originalVal, editMethod, {
-                        value: editValue,
-                        findText: findText,
-                        replaceText: replaceText,
-                        prefixValue: editValue,
-                        suffixValue: editValue
-                    });
-                } else if (fieldToEdit === 'requires_shipping') {
-                    originalVal = v.requiresShipping ? "True" : "False";
-                    updateVal = String(editValue).toLowerCase() === 'true' ? "True" : "False";
-                } else if (fieldToEdit === 'taxable') {
-                    originalVal = v.taxable ? "True" : "False";
-                    updateVal = String(editValue).toLowerCase() === 'true' ? "True" : "False";
-                } else if (fieldToEdit === 'metafield') {
-                    const target = metafieldTargetType === 'product' ? p : v;
-                    // Find the metafield in the edges array
-                    const metafieldEdge = target.metafields?.edges?.find((e: any) =>
-                        e.node.namespace === metafieldNamespace && e.node.key === metafieldKey
-                    );
-                    originalVal = metafieldEdge?.node?.value || "";
-                    updateVal = calculateUpdatedMetafieldValue({
-                        originalValue: originalVal,
-                        type: metafieldType,
-                        editMethod,
-                        inputValue: editValue
-                    });
-                } else if (fieldToEdit === 'price') {
-                    originalVal = v.price;
-                    updateVal = updateV;
-                } else if (fieldToEdit === 'compare_price') {
-                    originalVal = v.compareAtPrice || "";
-                    updateVal = calculateNewValue(originalVal || "0", { price: v.price, compareAtPrice: v.compareAtPrice, cost: v.cost });
-                }
-
-                // Handle sidebar tag changes for any edit mode
-                let tagsOriginal = "";
-                let tagsUpdated = "";
-                if (showSidebarTags || fieldToEdit === 'tags') {
-                    const currentTags = p.tags || [];
-                    tagsOriginal = currentTags.join(", ");
-                    let newTags = [...currentTags];
-                    if (addTags && tagsToAdd) {
-                        newTags = Array.from(new Set([...newTags, ...tagsToAdd]));
-                    }
-                    if (removeTags && tagsToRemove) {
-                        newTags = newTags.filter(t => !tagsToRemove.includes(t));
-                    }
-                    tagsUpdated = newTags.join(", ");
-                }
-
-                return {
-                    originalPrice: v.price,
-                    updatePrice: updateV,
-                    originalComparePrice: v.compareAtPrice || "",
-                    updateComparePrice: updateCompareV,
-                    originalCost: v.cost || "0.00",
-                    originalVal,
-                    updateVal,
-                    tagsOriginal,
-                    tagsUpdated
-                };
-            };
-
-            if (!p.variants || p.variants.length <= 1 || fieldToEdit === 'tags') {
-                const v = p.variants?.[0] || {};
-                const data = getRowData(v);
-                return [{
-                    id: v.id || p.id,
-                    image: p.image,
-                    product: p.title,
-                    ...data,
-                    isParent: false,
-                    isVariant: false
-                }];
-            }
-
-            const parentRecordData = getRowData(p.variants[0]);
-            const parentRow = {
-                id: p.id,
-                image: p.image,
-                product: p.title,
-                isParent: true,
-                originalPrice: "",
-                updatePrice: "",
-                originalComparePrice: "",
-                updateComparePrice: "",
-                originalVal: (['tags', 'status', 'vendor', 'product_type', 'requires_shipping', 'taxable'].includes(fieldToEdit) || (fieldToEdit === 'metafield' && metafieldTargetType === 'product')) ? parentRecordData.originalVal : "",
-                updateVal: (['tags', 'status', 'vendor', 'product_type', 'requires_shipping', 'taxable'].includes(fieldToEdit) || (fieldToEdit === 'metafield' && metafieldTargetType === 'product')) ? parentRecordData.updateVal : ""
-            };
-
-            const variantRows = p.variants.map((v: any) => {
-                const data = getRowData(v);
-                return {
-                    id: v.id,
-                    image: null,
-                    product: v.title,
-                    ...data,
-                    // If the parent item (p) had tags, apply them to variants too for consistent columns
-                    tagsOriginal: p.tagsOriginal,
-                    tagsUpdated: p.tagsUpdated,
-                    isVariant: true
-                };
-            });
-
-            return [parentRow, ...variantRows];
-        });
-    }, [products, market, fieldToEdit, priceOption, editMethod, editValue, rounding, roundingValue, metafieldType, metafieldTargetType, metafieldNamespace, metafieldKey, weightUnit, findText, replaceText, calculateNewValue, calculateNewCompareAt, calculateNewPrice, calculateUpdatedMetafieldValue]);
 
     return (
         <div style={{ position: 'relative' }}>
