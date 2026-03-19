@@ -903,17 +903,30 @@ export async function processBulkQueryResult(job: any, url: string) {
                             originalData[raw.id].title = raw.title;
                             originalData[raw.id].image = raw.featuredImage?.url;
 
-                            if (previewItems.length < 50 && fieldToEdit === 'status') {
-                                previewItems.push({
-                                    _v: 2,
-                                    isProductUpdate: true,
-                                    title: raw.title,
-                                    image: raw.featuredImage?.url || null,
-                                    original: raw.status,
-                                    updated: update.status,
-                                    status: 'pending'
-                                });
+                            if (previewItems.length < 50) {
+                                if (fieldToEdit === 'status') {
+                                    previewItems.push({
+                                        _v: 2,
+                                        isProductUpdate: true,
+                                        title: raw.title,
+                                        image: raw.featuredImage?.url || null,
+                                        original: raw.status,
+                                        updated: update.status,
+                                        status: 'pending'
+                                    });
+                                } else if (fieldToEdit === 'tags') {
+                                    previewItems.push({
+                                        _v: 2,
+                                        isProductUpdate: true,
+                                        title: raw.title,
+                                        image: raw.featuredImage?.url || null,
+                                        original: (raw.tags || []).join(", "),
+                                        updated: (update.tags || []).join(", "),
+                                        status: 'pending'
+                                    });
+                                }
                             }
+
                         }
 
                         if (fieldToEdit === 'vendor' || fieldToEdit === 'product_type') {

@@ -4854,9 +4854,26 @@ function PreviewTable({
                             </>
                         ) : (fieldToEdit as string) === 'tags' ? (
                             <>
-                                <IndexTable.Cell><Text variant="bodyMd" as="span">{row.originalVal}</Text></IndexTable.Cell>
-                                <IndexTable.Cell><Text variant="bodyMd" fontWeight="bold" as="span">{row.updateVal}</Text></IndexTable.Cell>
+                                <IndexTable.Cell>
+                                    <div style={{ minWidth: '150px', maxWidth: '300px' }}>
+                                        <InlineStack gap="100">
+                                            {(row.originalVal || "").split(",").filter(Boolean).map((t: string, i: number) => (
+                                                <Badge key={i}>{t.trim()}</Badge>
+                                            ))}
+                                        </InlineStack>
+                                    </div>
+                                </IndexTable.Cell>
+                                <IndexTable.Cell>
+                                    <div style={{ minWidth: '150px', maxWidth: '300px' }}>
+                                        <InlineStack gap="100">
+                                            {(row.updateVal || "").split(",").filter(Boolean).map((t: string, i: number) => (
+                                                <Badge key={i} tone="success">{t.trim()}</Badge>
+                                            ))}
+                                        </InlineStack>
+                                    </div>
+                                </IndexTable.Cell>
                             </>
+
                         ) : (
                             <>
                                 <IndexTable.Cell><Text variant="bodyMd" as="span">{row.originalVal}</Text></IndexTable.Cell>

@@ -937,7 +937,7 @@ export default function TaskDetail() {
                                                                                     <IndexTable.Cell>
                                                                                         {fieldToEdit === 'tags' ? (
                                                                                             <InlineStack gap="100">
-                                                                                                {(task.revertStatus === 'reverted' ? item.updated : item.original).split(",").filter(Boolean).map((tag: string, i: number) => (
+                                                                                                {((task.revertStatus === 'reverted' ? item.updated : item.original) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
                                                                                                     <Badge key={i} tone="attention">{tag.trim()}</Badge>
                                                                                                 ))}
                                                                                             </InlineStack>
@@ -950,7 +950,7 @@ export default function TaskDetail() {
                                                                                     <IndexTable.Cell>
                                                                                         {fieldToEdit === 'tags' ? (
                                                                                             <InlineStack gap="100">
-                                                                                                {(task.revertStatus === 'reverted' ? item.original : item.updated).split(",").filter(Boolean).map((tag: string, i: number) => (
+                                                                                                {((task.revertStatus === 'reverted' ? item.original : item.updated) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
                                                                                                     <Badge key={i} tone="success">{tag.trim()}</Badge>
                                                                                                 ))}
                                                                                             </InlineStack>
