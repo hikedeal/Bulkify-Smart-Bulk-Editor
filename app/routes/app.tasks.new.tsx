@@ -785,9 +785,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                         nodes
                     }
                     productTags(first: 250) {
-                        edges {
-                            node
-                        }
+                        nodes
                     }
                 }
                 collections(first: 250) {
@@ -875,8 +873,17 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         // 8. Fallback Tags (Products query) - resilient to rate limits
         (async () => {
             try {
-                const res = await admin.graphql(`query { products(first: 250) { edges { node { tags } } } }`);
-                return await res.json();
+                const res1 = await admin.graphql(`query { products(first: 250) { edges { node { tags } } } }`);
+                const data1 = await res1.json() as any;
+                const pageInfo = data1.data?.products?.pageInfo;
+                let data2: any = null;
+                if (pageInfo?.hasNextPage) {
+                    const res2 = await admin.graphql(`query($cursor: String) { products(first: 250, after: $cursor) { edges { node { tags } } } }`, {
+                        variables: { cursor: pageInfo.endCursor }
+                    });
+                    data2 = await res2.json();
+                }
+                return { data1, data2 };
             } catch (e) {
                 console.warn("Fallback tag fetch failed (rate limit?):", e);
                 return null;
@@ -924,15 +931,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         productVendors: responseJson.data?.shop?.productVendors?.nodes || [],
         productTags: (() => {
             const rawShopTags = responseJson.data?.shop?.productTags;
-            const rawProductTags = (fallbackTagsResponse as any)?.data?.products;
+            const fallbackData = fallbackTagsResponse as any;
 
-            const shopTags = new Set<string>((rawShopTags?.edges?.map((e: any) => e.node) || []) as string[]);
-            const prodTags = (rawProductTags?.edges?.flatMap((e: any) => e.node.tags) || []) as string[];
+            const shopTags = new Set<string>((rawShopTags?.nodes || []) as string[]);
 
-            prodTags.forEach((t: string) => shopTags.add(t));
+            // Process first batch of fallback
+            const data1Edges = fallbackData?.data1?.data?.products?.edges || [];
+            data1Edges.forEach((e: any) => {
+                (e.node?.tags || []).forEach((t: string) => shopTags.add(t));
+            });
+
+            // Process second batch if available
+            const data2Edges = fallbackData?.data2?.data?.products?.edges || [];
+            data2Edges.forEach((e: any) => {
+                (e.node?.tags || []).forEach((t: string) => shopTags.add(t));
+            });
 
             const finalTags = Array.from(shopTags).sort();
-
             return finalTags;
         })(),
         productMetafieldDefinitions: responseJson.data?.productMetafieldDefinitions?.nodes || [],
@@ -4080,6 +4095,10 @@ export default function CreateTaskPage() {
                                                 findText={findText}
                                                 replaceText={replaceText}
                                                 isLoading={fetcher.state !== 'idle'}
+                                                addTags={addTags}
+                                                tagsToAdd={tagsToAdd}
+                                                removeTags={removeTags}
+                                                tagsToRemove={tagsToRemove}
                                             />
                                         </div>
                                         <Box padding="400">
@@ -4274,7 +4293,11 @@ function PreviewTable({
     weightUnit,
     findText,
     replaceText,
-    isLoading
+    isLoading,
+    addTags,
+    tagsToAdd,
+    removeTags,
+    tagsToRemove
 }: {
     market: string,
     markets: any[],
@@ -4299,7 +4322,11 @@ function PreviewTable({
     weightUnit?: string,
     findText?: string,
     replaceText?: string,
-    isLoading?: boolean
+    isLoading?: boolean,
+    addTags?: boolean,
+    tagsToAdd?: string[],
+    removeTags?: boolean,
+    tagsToRemove?: string[]
 }) {
     // Dynamic Columns Configuration
     let columns: any[] = [
@@ -4423,6 +4450,12 @@ function PreviewTable({
             { title: `Original ${fieldToEdit}` },
             { title: `New ${fieldToEdit}` }
         ];
+    }
+
+    const showSidebarTags = (addTags && tagsToAdd && tagsToAdd.length > 0) || (removeTags && tagsToRemove && tagsToRemove.length > 0);
+    if (showSidebarTags && fieldToEdit !== 'tags') {
+        columns.push({ title: "Tags (Original)" });
+        columns.push({ title: "Tags (Updated)" });
     }
 
     // Add dynamic tag columns if any row has tagsUpdated (secondary tag actions)
@@ -4665,6 +4698,22 @@ function PreviewTable({
                     updateVal = calculateNewValue(originalVal || "0", { price: v.price, compareAtPrice: v.compareAtPrice, cost: v.cost });
                 }
 
+                // Handle sidebar tag changes for any edit mode
+                let tagsOriginal = "";
+                let tagsUpdated = "";
+                if (showSidebarTags || fieldToEdit === 'tags') {
+                    const currentTags = p.tags || [];
+                    tagsOriginal = currentTags.join(", ");
+                    let newTags = [...currentTags];
+                    if (addTags && tagsToAdd) {
+                        newTags = Array.from(new Set([...newTags, ...tagsToAdd]));
+                    }
+                    if (removeTags && tagsToRemove) {
+                        newTags = newTags.filter(t => !tagsToRemove.includes(t));
+                    }
+                    tagsUpdated = newTags.join(", ");
+                }
+
                 return {
                     originalPrice: v.price,
                     updatePrice: updateV,
@@ -4672,7 +4721,9 @@ function PreviewTable({
                     updateComparePrice: updateCompareV,
                     originalCost: v.cost || "0.00",
                     originalVal,
-                    updateVal
+                    updateVal,
+                    tagsOriginal,
+                    tagsUpdated
                 };
             };
 
@@ -4684,8 +4735,6 @@ function PreviewTable({
                     image: p.image,
                     product: p.title,
                     ...data,
-                    tagsOriginal: p.tagsOriginal, // Carry over from server item
-                    tagsUpdated: p.tagsUpdated,
                     isParent: false,
                     isVariant: false
                 }];
@@ -4856,7 +4905,7 @@ function PreviewTable({
                             <>
                                 <IndexTable.Cell>
                                     <div style={{ minWidth: '150px', maxWidth: '300px' }}>
-                                        <InlineStack gap="100">
+                                        <InlineStack gap="100" wrap={true}>
                                             {(row.originalVal || "").split(",").filter(Boolean).map((t: string, i: number) => (
                                                 <Badge key={i}>{t.trim()}</Badge>
                                             ))}
@@ -4865,7 +4914,7 @@ function PreviewTable({
                                 </IndexTable.Cell>
                                 <IndexTable.Cell>
                                     <div style={{ minWidth: '150px', maxWidth: '300px' }}>
-                                        <InlineStack gap="100">
+                                        <InlineStack gap="100" wrap={true}>
                                             {(row.updateVal || "").split(",").filter(Boolean).map((t: string, i: number) => (
                                                 <Badge key={i} tone="success">{t.trim()}</Badge>
                                             ))}
@@ -4878,6 +4927,29 @@ function PreviewTable({
                             <>
                                 <IndexTable.Cell><Text variant="bodyMd" as="span">{row.originalVal}</Text></IndexTable.Cell>
                                 <IndexTable.Cell><Text variant="bodyMd" fontWeight="bold" as="span">{row.updateVal}</Text></IndexTable.Cell>
+                            </>
+                        )}
+
+                        {showSidebarTags && fieldToEdit !== 'tags' && (
+                            <>
+                                <IndexTable.Cell>
+                                    <div style={{ minWidth: '150px', maxWidth: '300px' }}>
+                                        <InlineStack gap="100" wrap={true}>
+                                            {(row.tagsOriginal || "").split(",").filter(Boolean).map((t: string, i: number) => (
+                                                <Badge key={i}>{t.trim()}</Badge>
+                                            ))}
+                                        </InlineStack>
+                                    </div>
+                                </IndexTable.Cell>
+                                <IndexTable.Cell>
+                                    <div style={{ minWidth: '150px', maxWidth: '300px' }}>
+                                        <InlineStack gap="100" wrap={true}>
+                                            {(row.tagsUpdated || "").split(",").filter(Boolean).map((t: string, i: number) => (
+                                                <Badge key={i} tone="success">{t.trim()}</Badge>
+                                            ))}
+                                        </InlineStack>
+                                    </div>
+                                </IndexTable.Cell>
                             </>
                         )}
 

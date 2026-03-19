@@ -795,6 +795,11 @@ export default function TaskDetail() {
                                                         headings.push({ title: "Updated Value" });
                                                     }
                                                 }
+                                                const showSidebarTags = config.addTags || config.removeTags;
+                                                if (showSidebarTags && fieldToEdit !== 'tags') {
+                                                    headings.push({ title: "Tags (Original)" });
+                                                    headings.push({ title: "Tags (Updated)" });
+                                                }
                                                 return (
                                                     <BlockStack gap="400">
                                                         <IndexTable
@@ -936,7 +941,7 @@ export default function TaskDetail() {
                                                                                 <>
                                                                                     <IndexTable.Cell>
                                                                                         {fieldToEdit === 'tags' ? (
-                                                                                            <InlineStack gap="100">
+                                                                                            <InlineStack gap="100" wrap={true}>
                                                                                                 {((task.revertStatus === 'reverted' ? item.updated : item.original) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
                                                                                                     <Badge key={i} tone="attention">{tag.trim()}</Badge>
                                                                                                 ))}
@@ -949,7 +954,7 @@ export default function TaskDetail() {
                                                                                     </IndexTable.Cell>
                                                                                     <IndexTable.Cell>
                                                                                         {fieldToEdit === 'tags' ? (
-                                                                                            <InlineStack gap="100">
+                                                                                            <InlineStack gap="100" wrap={true}>
                                                                                                 {((task.revertStatus === 'reverted' ? item.original : item.updated) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
                                                                                                     <Badge key={i} tone="success">{tag.trim()}</Badge>
                                                                                                 ))}
@@ -959,6 +964,25 @@ export default function TaskDetail() {
                                                                                                 {task.revertStatus === 'reverted' ? item.original : item.updated}
                                                                                             </Text>
                                                                                         )}
+                                                                                    </IndexTable.Cell>
+                                                                                </>
+                                                                            )}
+
+                                                                            {showSidebarTags && fieldToEdit !== 'tags' && (
+                                                                                <>
+                                                                                    <IndexTable.Cell>
+                                                                                        <InlineStack gap="100" wrap={true}>
+                                                                                            {((task.revertStatus === 'reverted' ? item.tagsUpdated : item.tagsOriginal) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
+                                                                                                <Badge key={i} tone="attention">{tag.trim()}</Badge>
+                                                                                            ))}
+                                                                                        </InlineStack>
+                                                                                    </IndexTable.Cell>
+                                                                                    <IndexTable.Cell>
+                                                                                        <InlineStack gap="100" wrap={true}>
+                                                                                            {((task.revertStatus === 'reverted' ? item.tagsOriginal : item.tagsUpdated) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
+                                                                                                <Badge key={i} tone="success">{tag.trim()}</Badge>
+                                                                                            ))}
+                                                                                        </InlineStack>
                                                                                     </IndexTable.Cell>
                                                                                 </>
                                                                             )}
