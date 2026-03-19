@@ -4020,7 +4020,7 @@ export default function CreateTaskPage() {
                                         )}
                                     </BlockStack>
                                 </Banner>
-                                {fieldToEdit !== "tags" && (
+                                {true && (
                                     <div className="stat-card-static" style={{ overflow: 'hidden' }}>
                                         <Box padding="300">
                                             <BlockStack gap="200">
@@ -4411,7 +4411,9 @@ function PreviewTable({
     } else if (fieldToEdit === 'tags') {
         columns = [
             { title: "Image" },
-            { title: "Product" }
+            { title: "Product" },
+            { title: "Original Tags" },
+            { title: "Updated Tags" }
         ];
     } else if (fieldToEdit !== 'tags') {
         // Fallback or other fields
@@ -4561,7 +4563,7 @@ function PreviewTable({
     };
 
     const rows = useMemo(() => {
-        if (!products.length || market === 'empty' || fieldToEdit === 'tags') return [];
+        if (!products.length || market === 'empty') return [];
 
         // Safety net: deduplicate input products by ID
         const uniqueProductsMap = new Map();
@@ -4851,7 +4853,10 @@ function PreviewTable({
                                 </IndexTable.Cell>
                             </>
                         ) : (fieldToEdit as string) === 'tags' ? (
-                            null
+                            <>
+                                <IndexTable.Cell><Text variant="bodyMd" as="span">{row.originalVal}</Text></IndexTable.Cell>
+                                <IndexTable.Cell><Text variant="bodyMd" fontWeight="bold" as="span">{row.updateVal}</Text></IndexTable.Cell>
+                            </>
                         ) : (
                             <>
                                 <IndexTable.Cell><Text variant="bodyMd" as="span">{row.originalVal}</Text></IndexTable.Cell>
