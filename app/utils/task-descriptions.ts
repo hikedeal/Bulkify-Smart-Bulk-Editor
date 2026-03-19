@@ -43,7 +43,7 @@ export function getTaskDescriptionList(config: any, shopCurrency: string = "$"):
         descriptions.push(`${fieldLabel} (${method}): "${editValue}"`);
     } else if (fieldToEdit === 'tags') {
         const method = editMethod === 'add_tags' ? 'Add tags' : (editMethod === 'remove_tags' ? 'Remove tags' : 'Replace tags');
-        const tags = editMethod === 'add_tags' ? config.tagsToAdd : (editMethod === 'remove_tags' ? config.tagsToRemove : editValue);
+        const tags = editValue;
         descriptions.push(`${fieldLabel} (${method}): "${Array.isArray(tags) ? tags.join("\", \"") : tags}"`);
     } else if (fieldToEdit === 'metafield') {
         const mLabel = `Metafield "${config.metafieldName || (config.metafieldNamespace ? `${config.metafieldNamespace}.${config.metafieldKey}` : 'unknown')}"`;

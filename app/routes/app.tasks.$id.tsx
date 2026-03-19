@@ -700,8 +700,7 @@ export default function TaskDetail() {
                                 </div>
 
                                 {/* Product Changes Card */}
-                                {task.configuration?.fieldToEdit !== 'tags' && (
-                                    <div className="stat-card-static" style={{ overflow: 'hidden' }}>
+                                <div className="stat-card-static" style={{ overflow: 'hidden' }}>
                                         <Box padding="400">
                                             <BlockStack gap="400">
                                                 <InlineStack align="space-between" blockAlign="center">
@@ -781,13 +780,16 @@ export default function TaskDetail() {
                                                 // Add dynamic tag columns for secondary tag actions in history
                                                 // Remove secondary tag columns from main table (moved to sidebar)
 
-                                                if (!showPrice && !showCompareAt && !showCost && fieldToEdit !== 'tags') {
+                                                if (!showPrice && !showCompareAt && !showCost) {
                                                     if (fieldToEdit === 'requires_shipping') {
                                                         headings.push({ title: "Original Requires Shipping" });
                                                         headings.push({ title: "Updated Requires Shipping" });
                                                     } else if (fieldToEdit === 'taxable') {
                                                         headings.push({ title: "Original Taxable" });
                                                         headings.push({ title: "Updated Taxable" });
+                                                    } else if (fieldToEdit === 'tags') {
+                                                        headings.push({ title: "Original Tags" });
+                                                        headings.push({ title: "Updated Tags" });
                                                     } else {
                                                         headings.push({ title: "Original Value" });
                                                         headings.push({ title: "Updated Value" });
@@ -798,7 +800,7 @@ export default function TaskDetail() {
                                                         <IndexTable
                                                             resourceName={{ singular: "item", plural: "items" }}
                                                             itemCount={filteredProducts.filter((p: any) => {
-                                                                if (fieldToEdit === 'tags') return false;
+                                                                // if (fieldToEdit === 'tags') return false;
                                                                 // Filter duplicates: If we are editing PRICE, ignore rows that ONLY have tag info but no price info
                                                                 if (fieldToEdit === 'price') {
                                                                     if (p.isProductUpdate && p.original === undefined && p.updated === undefined && !p.original_price && !p.updated_price) {
@@ -818,7 +820,7 @@ export default function TaskDetail() {
                                                             ) : (
                                                                 filteredProducts
                                                                     .filter((p: any) => {
-                                                                        if (fieldToEdit === 'tags') return false;
+                                                                        // if (fieldToEdit === 'tags') return false;
                                                                         if (['price', 'compare_price', 'cost', 'inventory'].includes(fieldToEdit)) {
                                                                             if (p.isProductUpdate) {
                                                                                 return false;
@@ -978,7 +980,6 @@ export default function TaskDetail() {
                                             })()
                                         )}
                                     </div>
-                                )}
                             </BlockStack>
                         </Layout.Section>
 
