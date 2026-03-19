@@ -1286,7 +1286,11 @@ export default function CreateTaskPage() {
     // Form State
     const [taskName, setTaskName] = useState("New task");
     const [fieldToEdit, setFieldToEdit] = useState(initialType);
-    const [editMethod, setEditMethod] = useState("fixed");
+    const [editMethod, setEditMethod] = useState(
+        initialType === 'tags' ? 'add_tags' : 
+        initialType === 'vendor' ? 'set_vendor' :
+        'fixed'
+    );
     const [editValue, setEditValue] = useState("");
     const [rounding, setRounding] = useState("nearest_01");
     const [roundingValue, setRoundingValue] = useState("");
