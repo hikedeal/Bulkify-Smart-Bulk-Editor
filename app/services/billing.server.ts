@@ -9,11 +9,13 @@ export async function createSubscription(
   returnUrl: string,
   planType: "PRO_MONTHLY" | "PRO_YEARLY",
   discountCode?: string,
-  test: boolean = true
+  test: boolean = process.env.NODE_ENV !== "production"
 ) {
   const plan = PLAN_CONFIG[planType];
   let price = plan.price;
   let label = plan.label;
+
+  console.log(`[Billing] Creating subscription for ${planType}. Test mode: ${test}, Return URL: ${returnUrl}`);
 
   // Handle discount code logic if provided
   if (discountCode) {
@@ -72,7 +74,19 @@ export async function createSubscription(
   );
 
   const responseJson = await response.json();
-  const confirmationUrl = responseJson.data.appSubscriptionCreate.confirmationUrl;
+  const result = responseJson.data?.appSubscriptionCreate;
+
+  if (result?.userErrors && result.userErrors.length > 0) {
+    console.error("[Billing] Shopify User Errors:", JSON.stringify(result.userErrors));
+    throw new Error(`Shopify Billing Error: ${result.userErrors[0].message}`);
+  }
+
+  const confirmationUrl = result?.confirmationUrl;
+  if (!confirmationUrl) {
+    console.error("[Billing] No confirmationUrl returned. Full response:", JSON.stringify(responseJson));
+    throw new Error("No confirmationUrl returned from Shopify. Check server logs.");
+  }
+
   return confirmationUrl;
 }
 

@@ -309,18 +309,21 @@ export const action = async ({ request }: any) => {
             }
         }
 
-        const shopName = shop.replace(".myshopify.com", "");
-        const apiKey = process.env.SHOPIFY_API_KEY;
-        const returnUrl = `https://admin.shopify.com/store/${shopName}/apps/${apiKey}/app/plans?status=success`;
+        const appUrl = process.env.SHOPIFY_APP_URL;
+        // Shopify requires the returnUrl to be a sub-path of the app's URL.
+        const returnUrl = `${appUrl}/app/plans?status=success`;
+        
+        console.log(`[Plans] Attempting subscription. Shop: ${shop}, Plan: ${planType}, Return URL: ${returnUrl}`);
+
         try {
             const confirmationUrl = await createSubscription(admin, returnUrl, planType as any, discountCode as any);
 
             await trackEvent(shop, 'upgrade_clicked', { plan_type: planType });
 
             return { confirmationUrl };
-        } catch (err) {
-            console.error("Subscription error:", err);
-            return { ok: false, error: "Subscription failed" };
+        } catch (err: any) {
+            console.error("[Plans] Subscription error:", err);
+            return { ok: false, error: err.message || "Subscription failed" };
         }
     }
 
@@ -400,6 +403,10 @@ export default function PlansPage() {
 
         if (actionData?.ok && !actionData?.confirmationUrl) {
             window.shopify.toast.show("Plan updated successfully");
+        }
+
+        if (actionData?.error) {
+            window.shopify.toast.show(actionData.error as string, { isError: true });
         }
     }, [actionData]);
 
