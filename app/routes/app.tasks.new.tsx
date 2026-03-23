@@ -2704,7 +2704,7 @@ export default function CreateTaskPage() {
                 } else if (fieldToEdit === 'compare_price') {
                     originalVal = v.compareAtPrice || "";
                     updateVal = calculateNewValue(originalVal || "0", { price: v.price, compareAtPrice: v.compareAtPrice, cost: v.cost });
-                } else if (['title', 'body_html', 'handle', 'template_suffix', 'sku', 'barcode', 'seo_title', 'seo_description', 'google_product_category', 'google_age_group', 'google_gender', 'google_color', 'google_size', 'google_material', 'google_pattern', 'google_condition', 'google_mpn', 'google_brand', 'google_item_group_id', 'google_custom_product', 'google_custom_label_0', 'google_custom_label_1', 'google_custom_label_2', 'google_custom_label_3', 'google_custom_label_4', 'weight_unit', 'hs_code', 'country_of_origin', 'option1_name', 'option2_name', 'option3_name'].includes(fieldToEdit)) {
+                } else if (['title', 'body_html', 'handle', 'template_suffix', 'sku', 'barcode', 'seo_title', 'seo_description', 'google_product_category', 'google_age_group', 'google_gender', 'google_color', 'google_size', 'google_material', 'google_pattern', 'google_condition', 'google_mpn', 'google_brand', 'google_item_group_id', 'google_custom_product', 'google_custom_label_0', 'google_custom_label_1', 'google_custom_label_2', 'google_custom_label_3', 'google_custom_label_4', 'weight_unit', 'hs_code', 'country_of_origin'].includes(fieldToEdit)) {
                     originalVal = p[fieldToEdit] || v[fieldToEdit] || "";
                     updateVal = applyTextEdit(originalVal, editMethod, {
                         value: editValue,
@@ -2713,6 +2713,22 @@ export default function CreateTaskPage() {
                         prefixValue: editValue,
                         suffixValue: editValue
                     });
+                } else if (fieldToEdit === 'option1_name' || fieldToEdit === 'option2_name' || fieldToEdit === 'option3_name') {
+                    const idx = fieldToEdit === 'option1_name' ? 0 : (fieldToEdit === 'option2_name' ? 1 : 2);
+                    originalVal = p.options?.[idx]?.name || `Option ${idx + 1}`;
+                    updateVal = applyTextEdit(originalVal, editMethod, {
+                        value: editValue,
+                        findText: findText,
+                        replaceText: replaceText,
+                        prefixValue: editValue,
+                        suffixValue: editValue
+                    });
+                } else if (fieldToEdit === 'variant_management') {
+                    originalVal = "Existing variants";
+                    updateVal = editMethod === 'add_variant' ? "NEW VARIANT" : (editMethod === 'sort_variants' ? "REORDER" : "UPDATE");
+                } else if (fieldToEdit === 'add_option') {
+                    originalVal = "N/A";
+                    updateVal = "NEW OPTION";
                 }
 
                 // Handle tags (both for main field and sidebar)
@@ -3506,14 +3522,6 @@ export default function CreateTaskPage() {
                                                                 { label: "Set value", value: "fixed" },
                                                             ];
                                                         case 'vendor':
-                                                            return [
-                                                                { label: "Set vendor", value: "set_vendor" },
-                                                                { label: "Find & replace text", value: "find_replace" },
-                                                                { label: "Add prefix", value: "add_prefix" },
-                                                                { label: "Add suffix", value: "add_suffix" },
-                                                                { label: "Clear vendor", value: "clear_vendor" },
-                                                                { label: "Replace text", value: "replace_text" },
-                                                            ];
                                                         case 'product_type':
                                                         case 'title':
                                                         case 'body_html':
@@ -3547,12 +3555,11 @@ export default function CreateTaskPage() {
                                                         case 'option2_name':
                                                         case 'option3_name':
                                                             return [
-                                                                { label: "Set value", value: "fixed" },
+                                                                { label: "Set new value", value: "fixed" },
+                                                                { label: "Find and replace text", value: "find_replace" },
+                                                                { label: "Add text to beginning (Prefix)", value: "add_prefix" },
+                                                                { label: "Add text to end (Suffix)", value: "add_suffix" },
                                                                 { label: "Clear value", value: "clear_value" },
-                                                                { label: "Add prefix", value: "add_prefix" },
-                                                                { label: "Add suffix", value: "add_suffix" },
-                                                                { label: "Find & Replace", value: "find_replace" },
-                                                                { label: "Replace text", value: "replace_text" },
                                                             ];
                                                         case 'manual_collection':
                                                             return [

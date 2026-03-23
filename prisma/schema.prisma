@@ -368,6 +368,7 @@ model TaskRunItem {
   productId     String?   @map("product_id")
   productTitle  String?   @map("product_title")
   fieldName     String?   @map("field_name")
+  variantId     String?
   originalValue String?   @map("original_value")
   newValue      String?   @map("new_value")
   status        String?

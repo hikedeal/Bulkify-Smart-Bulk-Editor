@@ -540,6 +540,7 @@ async function bulkLogRunItems(runId: string, shop: string, fieldName: string, u
         runId: runId,
         shop: shop,
         productId: String(u.id || u.ownerId || ""), // ownerId for metafields
+        variantId: u.variantId ? String(u.variantId) : undefined,
         productTitle: u.title || "Unknown Item",
         fieldName: fieldName,
         originalValue: String(u.logOriginal ?? ""),
@@ -717,6 +718,14 @@ export async function processBulkQueryResult(job: any, url: string) {
         let originalData: any = {};
         let previewItems: any[] = [];
         let totalCount = 0;
+        
+        // Fetch current runId for logging
+        const activeRun = await prisma.taskRun.findFirst({
+            where: { jobId: job.jobId, status: 'running' },
+            orderBy: { startedAt: 'desc' }
+        });
+        const runId = activeRun?.id || "manual";
+
         let allActiveLocations: { id: string, name: string }[] = [];
         let targetLocationId = config.locationId;
 
@@ -1710,7 +1719,7 @@ export async function processBulkQueryResult(job: any, url: string) {
             if (addVariantRows.size > 0) {
                 console.log(`[Job ${job.jobId}] Creating variants for ${addVariantRows.size} products...`);
                 for (const [pid, vdata] of addVariantRows.entries()) {
-                    await shopifyAdmin.graphql(`
+                    const response = await shopifyAdmin.graphql(`
                         mutation productVariantCreate($input: ProductVariantInput!) {
                             productVariantCreate(input: $input) {
                                 productVariant { id }
@@ -1718,6 +1727,19 @@ export async function processBulkQueryResult(job: any, url: string) {
                             }
                         }
                     `, { variables: { input: { productId: pid, ...vdata } } });
+                    
+                    const resJson = await response.json() as any;
+                    const newVariantId = resJson.data?.productVariantCreate?.productVariant?.id;
+                    
+                    if (newVariantId) {
+                        await bulkLogRunItems(runId, job.shopDomain, 'add_variant', [{
+                            id: pid,
+                            variantId: newVariantId,
+                            title: vdata.title,
+                            logOriginal: "NONE",
+                            logNew: newVariantId
+                        }], 'success');
+                    }
                 }
             }
 
@@ -1739,13 +1761,30 @@ export async function processBulkQueryResult(job: any, url: string) {
                 console.log(`[Job ${job.jobId}] Adding options to ${addOptionRows.size} products...`);
                 for (const [pid, data] of addOptionRows.entries()) {
                     const { name, values } = data;
-                    await shopifyAdmin.graphql(`
+                    const response = await shopifyAdmin.graphql(`
                         mutation productOptionsCreate($productId: ID!, $options: [OptionCreateInput!]!) {
                             productOptionsCreate(productId: $productId, options: $options) {
+                                product {
+                                    options { id name }
+                                }
                                 userErrors { field message }
                             }
                         }
                     `, { variables: { productId: pid, options: [{ name, values: values.map((v: string) => ({ name: v })) }] } });
+                    
+                    const resJson = await response.json() as any;
+                    const createdOptions = resJson.data?.productOptionsCreate?.product?.options || [];
+                    const newOption = createdOptions.find((o: any) => o.name === name);
+                    
+                    if (newOption?.id) {
+                         await bulkLogRunItems(runId, job.shopDomain, 'add_option', [{
+                            id: pid,
+                            optionId: newOption.id,
+                            title: name,
+                            logOriginal: "NONE",
+                            logNew: newOption.id
+                        }], 'success');
+                    }
                 }
             }
 
@@ -4164,7 +4203,38 @@ export async function revertJob(job: any) {
                                     userErrors { field message }
                                 }
                             }
-                        `, { variables: { productId: pid, positions: vids.map((vid, index) => ({ id: vid, position: index + 1 })) } });
+                        `, { variables: { productId: pid, positions: vids.map((id, index) => ({ id, position: index + 1 })) } });
+                    }
+                }
+
+                // Handle deletions for 'Add' actions
+                const itemsToDelete = entries.filter(([id, data]) => 
+                    (job.configuration?.editMethod === 'add_variant' && data.variantId) || 
+                    (job.configuration?.editMethod === 'add_options' && data.optionId)
+                );
+
+                if (itemsToDelete.length > 0) {
+                    console.log(`[Job ${job.jobId}] Deleting ${itemsToDelete.length} added entities...`);
+                    for (const [id, data] of itemsToDelete) {
+                        if (job.configuration?.editMethod === 'add_variant' && data.variantId) {
+                            await shopifyAdmin.graphql(`
+                                mutation productVariantDelete($id: ID!) {
+                                    productVariantDelete(id: $id) {
+                                        deletedVariantId
+                                        userErrors { field message }
+                                    }
+                                }
+                            `, { variables: { id: data.variantId } });
+                        } else if (job.configuration?.editMethod === 'add_options' && data.optionId) {
+                            await shopifyAdmin.graphql(`
+                                mutation productOptionsDelete($productId: ID!, $optionIds: [ID!]!) {
+                                    productOptionsDelete(productId: $productId, optionIds: $optionIds) {
+                                        userErrors { field message }
+                                    }
+                                }
+                            `, { variables: { productId: id, optionIds: [data.optionId] } });
+                        }
+                        // Add similar for add_options if trackable
                     }
                 }
 
