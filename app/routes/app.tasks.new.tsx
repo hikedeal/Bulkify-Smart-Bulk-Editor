@@ -925,7 +925,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         apiKey: process.env.SHOPIFY_API_KEY || "",
         locations,
         markets: responseJson.data?.markets?.nodes || [],
-        shop: responseJson.data?.shop || {},
+        shop: responseJson.data?.shop || { currencyCode: "USD", ianaTimezone: "UTC" },
         productsCount: responseJson.data?.productsCount?.count || 0,
         collections: responseJson.data?.collections?.nodes || [],
         productTypes: responseJson.data?.shop?.productTypes?.nodes || [],
@@ -1272,18 +1272,42 @@ export default function CreateTaskPage() {
     const navigation = useNavigation();
     const actionData = useActionData<any>();
 
-    const getCurrencySymbolLocal = useCallback((code: string) => {
-        switch (code) {
-            case "INR": return "₹";
-            case "GBP": return "£";
-            case "EUR": return "€";
-            case "USD": return "$";
-            case "CAD": return "C$";
-            case "AUD": return "A$";
-            case "JPY": return "¥";
-            default: return code + " ";
-        }
-    }, []);
+    // Improved local currency lookup for better resilience
+    const getCurrencySymbolLocal = (code: string | undefined | null) => {
+        if (!code) return "$"; // Default to $ if code is missing to avoid "undefined "
+        const symbols: { [key: string]: string } = {
+            'USD': '$',
+            'EUR': '€',
+            'GBP': '£',
+            'INR': '₹',
+            'AUD': 'A$',
+            'CAD': 'C$',
+            'JPY': '¥',
+            'NZD': 'NZ$',
+            'SGD': 'S$',
+            'HKD': 'HK$',
+            'CHF': 'CHF',
+            'SEK': 'kr',
+            'NOK': 'kr',
+            'DKK': 'kr',
+            'ZAR': 'R',
+            'BRL': 'R$',
+            'RUB': '₽',
+            'KRW': '₩',
+            'CNY': '¥',
+            'MXN': '$',
+            'SAR': '﷼',
+            'AED': 'د.إ',
+            'ILS': '₪',
+            'PLN': 'zł',
+            'TRY': '₺'
+        };
+        const symbol = symbols[code];
+        if (symbol) return symbol;
+        
+        // Return code if no symbol found, but ensure it's not "undefined"
+        return code ? code + " " : "$";
+    };
 
     const initialType = searchParams.get("type") || "price";
 
@@ -1571,13 +1595,14 @@ export default function CreateTaskPage() {
 
     // Get the currency symbol for the currently selected preview market
     const currencySymbol = useMemo(() => {
-        if (!selectedPreviewMarket || selectedPreviewMarket === 'base') {
-            return getCurrencySymbolLocal(shop.currencyCode);
+        if (selectedPreviewMarket !== 'base' && selectedPreviewMarket !== 'empty') {
+            const market = markets.find((m: any) => m.handle === selectedPreviewMarket);
+            if (market?.regions?.nodes?.[0]?.currencyCode) {
+                return getCurrencySymbolLocal(market.regions.nodes[0].currencyCode);
+            }
         }
-        const marketObj = markets.find((m: any) => m.handle === selectedPreviewMarket);
-        const code = shop.currencyCode || shop.currencyCode;
-        return getCurrencySymbolLocal(code);
-    }, [selectedPreviewMarket, markets, shop.currencyCode, getCurrencySymbolLocal]);
+        return getCurrencySymbolLocal(shop?.currencyCode);
+    }, [shop?.currencyCode, selectedPreviewMarket, markets]);
 
     const formatTo12Hour = useCallback((time24: string) => {
         if (!time24) return "";
