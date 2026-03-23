@@ -1254,6 +1254,69 @@ export async function processBulkQueryResult(job: any, url: string) {
                             taxable: raw.taxable
                         };
 
+                        // --- NEW: Variant Filtering for Bulk Operations ---
+                        const applyToVariants = config.applyToVariants || "all";
+                        const variantMatchLogic = config.variantMatchLogic || "all";
+                        const variantConditions = config.variantConditions || [];
+
+                        if (applyToVariants === 'conditions' && variantConditions.length > 0) {
+                            const results = variantConditions.map((c: any) => {
+                                if (!c.value && !['price', 'compare_at', 'inventory'].includes(c.property)) return true;
+
+                                let targetValue = "";
+                                if (c.property === "title") targetValue = raw.title;
+                                if (c.property === "sku") targetValue = raw.sku || "";
+                                if (c.property === "price") targetValue = raw.price;
+                                if (c.property === "compare_at") targetValue = raw.compareAtPrice || "0";
+                                if (c.property === "inventory") targetValue = raw.inventoryQuantity?.toString() || "0";
+
+                                if (c.property === "option_name") {
+                                    return (raw.selectedOptions || []).some((opt: any) => {
+                                        const val = opt.name.toLowerCase();
+                                        const search = c.value.toLowerCase();
+                                        if (c.operator === "contains") return val?.includes(search);
+                                        if (c.operator === "equals") return val === search;
+                                        if (c.operator === "starts_with") return val.startsWith(search);
+                                        if (c.operator === "ends_with") return val.endsWith(search);
+                                        return false;
+                                    });
+                                }
+                                if (c.property === "option_value") {
+                                    return (raw.selectedOptions || []).some((opt: any) => {
+                                        const val = opt.value.toLowerCase();
+                                        const search = c.value.toLowerCase();
+                                        if (c.operator === "contains") return val?.includes(search);
+                                        if (c.operator === "equals") return val === search;
+                                        if (c.operator === "starts_with") return val.startsWith(search);
+                                        if (c.operator === "ends_with") return val.endsWith(search);
+                                        return false;
+                                    });
+                                }
+
+                                const searchVal = c.value.toLowerCase();
+                                const targetValLower = targetValue.toLowerCase();
+
+                                if (['price', 'compare_at', 'inventory'].includes(c.property)) {
+                                    const nTarget = parseFloat(targetValue) || 0;
+                                    const nSearch = parseFloat(c.value) || 0;
+                                    if (c.operator === "equals") return nTarget === nSearch;
+                                    if (c.operator === "greater_than") return nTarget > nSearch;
+                                    if (c.operator === "less_than") return nTarget < nSearch;
+                                    return false;
+                                }
+
+                                if (c.operator === "contains") return targetValLower?.includes(searchVal);
+                                if (c.operator === "equals") return targetValLower === searchVal;
+                                if (c.operator === "starts_with") return targetValLower.startsWith(searchVal);
+                                if (c.operator === "ends_with") return targetValLower.endsWith(searchVal);
+
+                                return false;
+                            });
+
+                            const matches = variantMatchLogic === 'any' ? results.some((r: boolean) => r === true) : results.every((r: boolean) => r === true);
+                            if (!matches) continue;
+                        }
+
                         let effectiveLocationId = targetLocationId;
                         if (fieldToEdit === 'inventory') {
                             const itemId = raw.inventoryItem?.id;
