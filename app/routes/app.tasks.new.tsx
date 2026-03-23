@@ -1260,11 +1260,6 @@ export default function CreateTaskPage() {
         featureFlags
     } = useLoaderData<typeof loader>();
     const isV2Enabled = featureFlags?.enable_full_product_edit_v2 === true;
-
-    // DEBUG RENDER
-    console.log("DEBUG RENDER: shop:", JSON.stringify(shop));
-    console.log("DEBUG RENDER: selectedPreviewMarket:", selectedPreviewMarket);
-    console.log("DEBUG RENDER: currencySymbol derived:", currencySymbol);
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const fetcher = useFetcher();
@@ -1275,51 +1270,22 @@ export default function CreateTaskPage() {
     const actionData = useActionData<any>();
 
     // Improved local currency lookup for better resilience
-    const getCurrencySymbolLocal = useCallback((code: string | undefined | null) => {
-        // Defensive check: handle actual missing values AND the literal strings "undefined"/"null"
-        if (!code || code === 'undefined' || code === 'null') {
-            console.log("DEBUG: getCurrencySymbolLocal received invalid code:", code);
-            return "$";
-        }
+    const getCurrencySymbolLocal = (code: string | undefined | null) => {
+        if (!code || code === 'undefined' || code === 'null') return "$";
         
         const symbols: { [key: string]: string } = {
-            'USD': '$',
-            'EUR': '€',
-            'GBP': '£',
-            'INR': '₹',
-            'AUD': 'A$',
-            'CAD': 'C$',
-            'JPY': '¥',
-            'NZD': 'NZ$',
-            'SGD': 'S$',
-            'HKD': 'HK$',
-            'CHF': 'CHF',
-            'SEK': 'kr',
-            'NOK': 'kr',
-            'DKK': 'kr',
-            'ZAR': 'R',
-            'BRL': 'R$',
-            'RUB': '₽',
-            'KRW': '₩',
-            'CNY': '¥',
-            'MXN': '$',
-            'SAR': '﷼',
-            'AED': 'د.إ',
-            'ILS': '₪',
-            'PLN': 'zł',
-            'TRY': '₺'
+            'USD': '$', 'EUR': '€', 'GBP': '£', 'INR': '₹', 'AUD': 'A$', 'CAD': 'C$',
+            'JPY': '¥', 'NZD': 'NZ$', 'SGD': 'S$', 'HKD': 'HK$', 'CHF': 'CHF'
         };
         const symbol = symbols[code];
         if (symbol) return symbol;
-        
-        // Return code if no symbol found, but ensure it's not "undefined"
         return (code && code !== 'undefined' && code !== 'null') ? code + " " : "$";
-    }, []);
+    };
 
     const initialType = searchParams.get("type") || "price";
 
     // Form State
-    const [taskName, setTaskName] = useState("New task");
+    const [taskName, setTaskName] = useState("");
     const [fieldToEdit, setFieldToEdit] = useState(initialType);
     const [editMethod, setEditMethod] = useState(
         initialType === 'tags' ? 'add_tags' : 
