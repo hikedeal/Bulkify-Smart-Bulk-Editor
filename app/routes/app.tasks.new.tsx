@@ -795,7 +795,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
                         title
                     }
                 }
-                productsCount(limit: null) {
+                productsCount(query: "") {
                     count
                 }
 
