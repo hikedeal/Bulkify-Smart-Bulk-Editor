@@ -761,20 +761,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             try {
                 return await admin.graphql(
             `#graphql
-            query getMetadata {
-                markets(first: 25) {
+                publications(first: 250) {
+                    edges {
+                        node {
+                            id
+                            name
+                        }
+                    }
+                }
+                markets(first: 250) {
                     nodes {
                         id
                         name
                         handle
-                        regions(first: 1) {
-                            nodes {
-                                ... on MarketRegionCountry {
-                                    code
-                                }
-                            }
-                        }
-
                     }
                 }
                 shop {
@@ -893,7 +892,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         })()
     ]);
 
-    const { plan: shopPlan, features: shopFeatures } = planInfo;
+    const { plan: shopPlan, features: shopFeatures, featureFlags } = planInfo;
 
     const responseJson: any = response ? await response.json() : { data: null };
     console.log("DEBUG LOADER: Metadata response:", JSON.stringify(responseJson.data?.productsCount));
@@ -957,9 +956,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         metafieldPresets: metafieldPresets || [],
         metafieldFavorites: metafieldFavorites || [],
         metafieldRecent: metafieldRecent || [],
+        publications: responseJson.data?.publications?.edges?.map((e: any) => e.node) || [],
         editJob: editJob,
         shopFeatures,
-        shopPlan
+        shopPlan,
+        featureFlags: featureFlags || {}
     };
 };
 
@@ -1253,9 +1254,12 @@ export default function CreateTaskPage() {
         metafieldPresets,
         metafieldFavorites,
         metafieldRecent,
+        publications,
         shopFeatures,
-        shopPlan
+        shopPlan,
+        featureFlags
     } = useLoaderData<typeof loader>();
+    const isV2Enabled = featureFlags?.enable_full_product_edit_v2 === true;
 
     // DEBUG RENDER
     console.log("DEBUG RENDER: productsCount from loader:", productsCount);
@@ -1333,7 +1337,13 @@ export default function CreateTaskPage() {
     const [fieldSelectorActive, setFieldSelectorActive] = useState(false);
 
     const isFieldLocked = (field: string) => {
-        return !shopFeatures.includes(field);
+        let normalizedField = field;
+        if (field.startsWith('metafield:')) normalizedField = 'metafield';
+        else if (field.startsWith('publication:')) normalizedField = 'sales_channels';
+        else if (field.startsWith('market_publish:')) normalizedField = 'market_publishing';
+        else if (field.startsWith('market_price:')) normalizedField = 'market_price';
+        
+        return !shopFeatures.includes(normalizedField);
     };
 
     const toggleFieldSelector = useCallback(() => setFieldSelectorActive((active) => !active), []);
@@ -1345,19 +1355,53 @@ export default function CreateTaskPage() {
             return;
         }
 
-        setFieldToEdit(val);
-
+        let finalField = val;
         let nextMethod = 'fixed';
         let nextValue = '';
 
-        if (val === 'tags') {
+        if (val.startsWith('metafield:')) {
+            const [, ns, key, type] = val.split(':');
+            finalField = 'metafield';
+            setMetafieldNamespace(ns);
+            setMetafieldKey(key);
+            setMetafieldType(type || 'single_line_text_field');
+            setMetafieldMode(0); // Select existing mode
+            setMetafieldTargetType('product'); // Default or inferred
+            
+            const defs = productMetafieldDefinitions;
+            const found = defs.find((d: any) => d.namespace === ns && d.key === key);
+            if (found) {
+                setSelectedDefinition(found);
+                setMetafieldSearchText(found.name);
+            }
+        } else if (val.startsWith('publication:')) {
+            const id = val.split(':').slice(1).join(':');
+            finalField = 'sales_channels';
+            setEditValue(id);
+            nextMethod = 'publish';
+        } else if (val.startsWith('market_publish:')) {
+            const id = val.split(':').slice(1).join(':');
+            finalField = 'market_publishing';
+            setEditValue(id);
+            nextMethod = 'publish';
+        } else if (val.startsWith('market_price:')) {
+            const id = val.split(':').slice(1).join(':');
+            finalField = 'price'; // We can map market price back to price field with market context
+            setApplyToMarkets(true);
+            setSelectedMarkets([id]);
+            setApplyToBasePrice(false);
+        }
+
+        setFieldToEdit(finalField);
+
+        if (finalField === 'tags') {
             nextMethod = 'add_tags';
-        } else if (val === 'status') {
+        } else if (finalField === 'status') {
             nextValue = 'ACTIVE';
-        } else if (val === 'inventory') {
+        } else if (finalField === 'inventory') {
             nextMethod = 'fixed';
             nextValue = '0';
-        } else if (val === 'requires_shipping' || val === 'taxable') {
+        } else if (finalField === 'requires_shipping' || finalField === 'taxable') {
             nextValue = 'true';
         }
 
@@ -1366,22 +1410,156 @@ export default function CreateTaskPage() {
         setFieldSelectorActive(false);
     };
 
+    const groupedFieldOptions = useMemo(() => {
+        return [
+            {
+                title: "Product Fields",
+                options: [
+                    { label: "Title", value: "title", isPro: true },
+                    { label: "Description", value: "body_html", isPro: true },
+                    { label: "Handle", value: "handle", isPro: true },
+                    { label: "Images / Media", value: "images", isPro: true },
+                    { label: "Manual Collection", value: "manual_collection", isPro: true },
+                    { label: "Option 1 Name", value: "option1_name", isPro: true },
+                    { label: "Option 2 Name", value: "option2_name", isPro: true },
+                    { label: "Option 3 Name", value: "option3_name", isPro: true },
+                    { label: "Product Type", value: "product_type", isPro: true },
+                    { label: "Status", value: "status" },
+                    { label: "Vendor", value: "vendor", isPro: true },
+                    { label: "Tags", value: "tags", isPro: true },
+                    { label: "Template", value: "template_suffix", isPro: true },
+                    { label: "SEO Title", value: "seo_title", isPro: true },
+                    { label: "SEO Description", value: "seo_description", isPro: true },
+                    { label: "Search visibility", value: "published", isPro: true },
+                ]
+            },
+            {
+                title: "Variant Fields",
+                options: [
+                    { label: "Price", value: "price" },
+                    { label: "Compare at price", value: "compare_price" },
+                    { label: "Cost", value: "cost" },
+                    { label: "Inventory", value: "inventory", isPro: true },
+                    { label: "SKU", value: "sku", isPro: true },
+                    { label: "Barcode", value: "barcode", isPro: true },
+                    { label: "Weight", value: "weight", isPro: true },
+                    { label: "Weight Unit", value: "weight_unit", isPro: true },
+                    { label: "Inventory Policy", value: "inventory_policy", isPro: true },
+                    { label: "Track Quantity", value: "inventory_management", isPro: true },
+                    { label: "Taxable", value: "taxable", isPro: true },
+                    { label: "Requires Shipping", value: "requires_shipping", isPro: true },
+                    { label: "HS Code", value: "hs_code", isPro: true },
+                    { label: "Country of Origin", value: "country_of_origin", isPro: true },
+                ]
+            },
+            {
+                title: "Google Shopping",
+                options: [
+                    { label: "Product Category", value: "google_product_category", isPro: true },
+                    { label: "Age Group", value: "google_age_group", isPro: true },
+                    { label: "Gender", value: "google_gender", isPro: true },
+                    { label: "Color", value: "google_color", isPro: true },
+                    { label: "Size", value: "google_size", isPro: true },
+                    { label: "Material", value: "google_material", isPro: true },
+                    { label: "Pattern", value: "google_pattern", isPro: true },
+                    { label: "Condition", value: "google_condition", isPro: true },
+                    { label: "MPN", value: "google_mpn", isPro: true },
+                    { label: "Brand", value: "google_brand", isPro: true },
+                    { label: "Custom Label 0", value: "google_custom_label_0", isPro: true },
+                    { label: "Custom Label 1", value: "google_custom_label_1", isPro: true },
+                    { label: "Custom Label 2", value: "google_custom_label_2", isPro: true },
+                    { label: "Custom Label 3", value: "google_custom_label_3", isPro: true },
+                    { label: "Custom Label 4", value: "google_custom_label_4", isPro: true },
+                ]
+            },
+            {
+                title: "Product Metafields",
+                options: [
+                    ...(productMetafieldDefinitions.map((def: any) => ({
+                        label: def.name,
+                        value: `metafield:${def.namespace}:${def.key}:${def.type.name}`,
+                        isPro: true
+                    }))),
+                    { label: "Custom Metafield", value: "metafield", isPro: true }
+                ]
+            },
+            {
+                title: "Sales Channel Publishing",
+                options: publications.map((p: any) => ({
+                    label: p.name,
+                    value: `publication:${p.id}`,
+                    isPro: true
+                }))
+            },
+            {
+                title: "Market / Catalog Publishing",
+                options: (markets || []).map((m: any) => ({
+                    label: m.name,
+                    value: `market_publish:${m.id}`,
+                    isPro: true
+                }))
+            },
+            {
+                title: "Market / Catalog Price",
+                options: (markets || []).map((m: any) => ({
+                    label: `${m.name} Price`,
+                    value: `market_price:${m.id}`,
+                    isPro: true
+                }))
+            },
+            {
+                title: "Search & Discovery",
+                options: [
+                    { label: "Complementary products", value: "metafield:shopify:complementary_products:product_reference", isPro: true },
+                    { label: "Related products", value: "metafield:shopify:related_products:product_reference", isPro: true },
+                    { label: "Search boost", value: "metafield:shopify:search_boost:single_line_text_field", isPro: true },
+                    { label: "Recommendations", value: "metafield:shopify:recommendations:product_reference", isPro: true },
+                ]
+            },
+            {
+                title: "Actions",
+                options: [
+                    { label: "Add variants", value: "add_variants", isPro: true },
+                    { label: "Add product option", value: "add_options", isPro: true },
+                    { label: "Reorder options", value: "reorder_options", isPro: true },
+                    { label: "Sort variants", value: "sort_variants", isPro: true },
+                    { label: "Delete products", value: "delete_products", isPro: true },
+                    { label: "Delete variants", value: "delete_variants", isPro: true },
+                    { label: "Connect inventory locations", value: "connect_locations", isPro: true },
+                ]
+            }
+        ];
+    }, [productMetafieldDefinitions, publications, markets]);
+
     const getFieldLabel = (value: string) => {
-        const option = [
-            { label: "Price", value: "price" },
-            { label: "Compare price", value: "compare_price" },
-            { label: "Status", value: "status" },
-            { label: "Cost", value: "cost" },
-            { label: "Inventory", value: "inventory" },
-            { label: "Tags", value: "tags" },
-            { label: "Metafield", value: "metafield" },
-            { label: "Weight", value: "weight" },
-            { label: "Vendor", value: "vendor" },
-            { label: "Product type", value: "product_type" },
-            { label: "Requires shipping", value: "requires_shipping" },
-            { label: "Taxable", value: "taxable" },
-        ].find(o => o.value === value);
-        return option ? option.label : value;
+        // First check static groups
+        for (const group of groupedFieldOptions) {
+            const found = group.options.find((o: any) => o.value === value);
+            if (found) return found.label;
+        }
+
+        // Handle dynamic patterns if not in static list
+        if (value.startsWith('metafield:')) {
+            const [, ns, key] = value.split(':');
+            return `${ns}.${key}`;
+        }
+        if (value.startsWith('publication:')) {
+            const id = value.split(':').slice(1).join(':');
+            const pub = publications.find((p: any) => p.id === id);
+            return pub ? pub.name : "Publication";
+        }
+        if (value.startsWith('market_publish:')) {
+            const id = value.split(':').slice(1).join(':');
+            const m = markets.find((m: any) => m.id === id);
+            return m ? `${m.name} Visibility` : "Market Status";
+        }
+        if (value.startsWith('market_price:')) {
+            const id = value.split(':').slice(1).join(':');
+            const m = markets.find((m: any) => m.id === id);
+            return m ? `${m.name} Price` : "Market Price";
+        }
+
+        return value;
     };
 
     const [selectedMarkets, setSelectedMarkets] = useState<string[]>([]);
@@ -1841,20 +2019,43 @@ export default function CreateTaskPage() {
             vendor: "Vendor",
             product_type: "Product type",
             requires_shipping: "Requires shipping",
-            taxable: "Taxable"
+            taxable: "Taxable",
+            title: "Title",
+            body_html: "Body HTML",
+            handle: "Handle",
+            template_suffix: "Template Suffix",
+            published: "Published Status",
+            sku: "SKU",
+            barcode: "Barcode",
+            inventory_policy: "Inventory Policy",
+            seo_title: "SEO Title",
+            seo_description: "SEO Description",
+            google_product_category: "Google Product Category",
+            google_custom_label_0: "Google Custom Label 0",
+            google_custom_label_1: "Google Custom Label 1",
+            google_custom_label_2: "Google Custom Label 2",
+            google_custom_label_3: "Google Custom Label 3",
+            google_custom_label_4: "Google Custom Label 4",
+            google_item_group_id: "Google Item Group ID",
+            google_custom_product: "Google Custom Product"
         } as any)[fieldToEdit] || fieldToEdit;
 
         if (fieldToEdit === 'status') {
             edits.push(`Set status to "${editValue || 'Active'}"`);
-        } else if (fieldToEdit === 'requires_shipping' || fieldToEdit === 'taxable') {
-            const val = editValue === 'true' ? 'True' : 'False';
+        } else if (['requires_shipping', 'taxable', 'published'].includes(fieldToEdit)) {
+            let val = editValue === 'true' ? 'True' : 'False';
+            if (fieldToEdit === 'published') val = editValue === 'true' ? 'Visible' : 'Hidden';
+            else if (fieldToEdit === 'requires_shipping' || fieldToEdit === 'taxable') val = editValue === 'true' ? 'Yes' : 'No';
             edits.push(`Set ${fieldLabel} to "${val}"`);
         } else if (fieldToEdit === 'weight') {
             const method = editMethod === 'fixed' ? 'fixed value' : (editMethod.includes('inc') ? 'increase' : 'decrease');
             edits.push(`${fieldLabel} (${method}): ${editValue}${weightUnit}`);
-        } else if (fieldToEdit === 'vendor' || fieldToEdit === 'product_type') {
+        } else if (['vendor', 'product_type', 'title', 'body_html', 'handle', 'template_suffix', 'sku', 'barcode', 'seo_title', 'seo_description', 'google_product_category', 'google_custom_label_0', 'google_custom_label_1', 'google_custom_label_2', 'google_custom_label_3', 'google_custom_label_4', 'google_item_group_id', 'google_custom_product'].includes(fieldToEdit)) {
             const method = editMethod === 'replace_text' ? 'replace text' : 'fixed value';
             edits.push(`${fieldLabel} (${method}): "${editValue}"`);
+        } else if (fieldToEdit === 'inventory_policy') {
+            const val = editValue?.toUpperCase() === 'CONTINUE' ? 'Continue' : 'Deny';
+            edits.push(`Set ${fieldLabel} to "${val}"`);
         } else if (fieldToEdit === 'tags') {
             const method = editMethod === 'add_tags' ? 'Add tags' : (editMethod === 'remove_tags' ? 'Remove tags' : 'Replace tags');
             const tags = editMethod === 'add_tags' ? tagsToAdd : (editMethod === 'remove_tags' ? tagsToRemove : editValue);
@@ -2503,6 +2704,15 @@ export default function CreateTaskPage() {
                 } else if (fieldToEdit === 'compare_price') {
                     originalVal = v.compareAtPrice || "";
                     updateVal = calculateNewValue(originalVal || "0", { price: v.price, compareAtPrice: v.compareAtPrice, cost: v.cost });
+                } else if (['title', 'body_html', 'handle', 'template_suffix', 'sku', 'barcode', 'seo_title', 'seo_description', 'google_product_category', 'google_age_group', 'google_gender', 'google_color', 'google_size', 'google_material', 'google_pattern', 'google_condition', 'google_mpn', 'google_brand', 'google_item_group_id', 'google_custom_product', 'google_custom_label_0', 'google_custom_label_1', 'google_custom_label_2', 'google_custom_label_3', 'google_custom_label_4', 'weight_unit', 'hs_code', 'country_of_origin', 'option1_name', 'option2_name', 'option3_name'].includes(fieldToEdit)) {
+                    originalVal = p[fieldToEdit] || v[fieldToEdit] || "";
+                    updateVal = applyTextEdit(originalVal, editMethod, {
+                        value: editValue,
+                        findText: findText,
+                        replaceText: replaceText,
+                        prefixValue: editValue,
+                        suffixValue: editValue
+                    });
                 }
 
                 // Handle tags (both for main field and sidebar)
@@ -2575,8 +2785,8 @@ export default function CreateTaskPage() {
                 updatePrice: "",
                 originalComparePrice: "",
                 updateComparePrice: "",
-                originalVal: (['tags', 'status', 'vendor', 'product_type', 'requires_shipping', 'taxable'].includes(fieldToEdit) || (fieldToEdit === 'metafield' && metafieldTargetType === 'product')) ? parentRecordData.originalVal : "",
-                updateVal: (['tags', 'status', 'vendor', 'product_type', 'requires_shipping', 'taxable'].includes(fieldToEdit) || (fieldToEdit === 'metafield' && metafieldTargetType === 'product')) ? parentRecordData.updateVal : ""
+                originalVal: (['tags', 'status', 'vendor', 'product_type', 'requires_shipping', 'taxable', 'google_item_group_id', 'google_custom_product'].includes(fieldToEdit) || (fieldToEdit === 'metafield' && metafieldTargetType === 'product')) ? parentRecordData.originalVal : "",
+                updateVal: (['tags', 'status', 'vendor', 'product_type', 'requires_shipping', 'taxable', 'google_item_group_id', 'google_custom_product'].includes(fieldToEdit) || (fieldToEdit === 'metafield' && metafieldTargetType === 'product')) ? parentRecordData.updateVal : ""
             };
 
             const variantRows = p.variants.map((v: any) => {
@@ -2651,6 +2861,24 @@ export default function CreateTaskPage() {
         }
     }, [actionData]);
 
+    const handleReview = () => {
+        // Validation
+        if (applyToProducts === 'specific' && selectedProducts.length === 0) {
+            window.shopify.toast.show("Please select at least one product", { isError: true });
+            return;
+        }
+        if (applyToProducts === 'collections' && selectedCollections.length === 0) {
+            window.shopify.toast.show("Please select at least one collection", { isError: true });
+            return;
+        }
+        if (applyToProducts === 'conditions' && productConditions.length === 0) {
+            window.shopify.toast.show("Please add at least one condition", { isError: true });
+            return;
+        }
+
+        setIsModalOpen(true);
+    };
+
     function handleCreateTask() {
         // Validation
         if (applyToProducts === 'specific' && selectedProducts.length === 0) {
@@ -2702,8 +2930,8 @@ export default function CreateTaskPage() {
             metafieldType: fieldToEdit === 'metafield' ? metafieldType : undefined,
             metafieldTargetType: fieldToEdit === 'metafield' ? metafieldTargetType : undefined,
             weightUnit: fieldToEdit === 'weight' ? weightUnit : undefined,
-            findText: (fieldToEdit === 'vendor' || fieldToEdit === 'product_type' || fieldToEdit === 'metafield') ? findText : undefined,
-            replaceText: (fieldToEdit === 'vendor' || fieldToEdit === 'product_type' || fieldToEdit === 'metafield') ? replaceText : undefined,
+            findText: (['vendor', 'product_type', 'title', 'body_html', 'handle', 'template_suffix', 'sku', 'barcode', 'seo_title', 'seo_description', 'google_product_category', 'google_custom_label_0', 'google_custom_label_1', 'google_custom_label_2', 'google_custom_label_3', 'google_custom_label_4', 'google_item_group_id', 'google_custom_product', 'metafield'].includes(fieldToEdit)) ? findText : undefined,
+            replaceText: (['vendor', 'product_type', 'title', 'body_html', 'handle', 'template_suffix', 'sku', 'barcode', 'seo_title', 'seo_description', 'google_product_category', 'google_custom_label_0', 'google_custom_label_1', 'google_custom_label_2', 'google_custom_label_3', 'google_custom_label_4', 'google_item_group_id', 'google_custom_product', 'metafield'].includes(fieldToEdit)) ? replaceText : undefined,
         };
 
         const formData = new FormData();
@@ -2762,13 +2990,10 @@ export default function CreateTaskPage() {
                                 <Text as="span" fontWeight="medium">Cancel</Text>
                             </div>
                             <Button
+                                onClick={handleReview}
                                 variant="primary"
-                                size="large"
-                                onClick={() => setIsModalOpen(true)}
-                                loading={navigation.state === "submitting"}
-                                disabled={navigation.state === "submitting" || !isRevertTimeValid() || !isStartTimeValid()}
                             >
-                                {editJob ? "Update task" : "Create task"}
+                                Review & Save
                             </Button>
                         </InlineStack>
                     </div>
@@ -2815,24 +3040,15 @@ export default function CreateTaskPage() {
                                         onClose={toggleFieldSelector}
                                     >
                                         <ActionList
-                                            items={[
-                                                { label: "Price", value: "price" },
-                                                { label: "Compare price", value: "compare_price" },
-                                                { label: "Status", value: "status" },
-                                                { label: "Cost", value: "cost" },
-                                                { label: "Inventory", value: "inventory" },
-                                                { label: "Tags", value: "tags" },
-                                                { label: "Metafield", value: "metafield" },
-                                                { label: "Weight", value: "weight" },
-                                                { label: "Vendor", value: "vendor" },
-                                                { label: "Product type", value: "product_type" },
-                                                { label: "Requires shipping", value: "requires_shipping" },
-                                                { label: "Taxable", value: "taxable" },
-                                            ].map(opt => ({
-                                                content: opt.label,
-                                                icon: isFieldLocked(opt.value) ? LockIcon : undefined,
-                                                onAction: () => handleFieldChange(opt.value),
-                                                active: fieldToEdit === opt.value
+                                            sections={groupedFieldOptions.map((group: any) => ({
+                                                title: group.title,
+                                                items: group.options.map((opt: any) => ({
+                                                    content: opt.label,
+                                                    icon: isFieldLocked(opt.value) ? LockIcon : undefined,
+                                                    suffix: opt.isPro ? <Badge tone="attention" size="small">PRO</Badge> : undefined,
+                                                    onAction: () => handleFieldChange(opt.value),
+                                                    active: fieldToEdit === opt.value
+                                                }))
                                             }))}
                                         />
                                     </Popover>
@@ -3263,6 +3479,7 @@ export default function CreateTaskPage() {
                                                 options={(() => {
                                                     switch (fieldToEdit) {
                                                         case 'inventory':
+                                                        case 'inventory_quantity':
                                                             return [
                                                                 { label: "Set to fixed quantity", value: "fixed" },
                                                                 { label: "Increase inventory", value: "amount_inc" },
@@ -3278,8 +3495,13 @@ export default function CreateTaskPage() {
                                                             return [
                                                                 { label: "Set status", value: "fixed" },
                                                             ];
+                                                        case 'inventory_policy':
+                                                            return [
+                                                                { label: "Set policy", value: "fixed" },
+                                                            ];
                                                         case 'requires_shipping':
                                                         case 'taxable':
+                                                        case 'published':
                                                             return [
                                                                 { label: "Set value", value: "fixed" },
                                                             ];
@@ -3293,6 +3515,37 @@ export default function CreateTaskPage() {
                                                                 { label: "Replace text", value: "replace_text" },
                                                             ];
                                                         case 'product_type':
+                                                        case 'title':
+                                                        case 'body_html':
+                                                        case 'handle':
+                                                        case 'template_suffix':
+                                                        case 'sku':
+                                                        case 'barcode':
+                                                        case 'seo_title':
+                                                        case 'seo_description':
+                                                        case 'google_product_category':
+                                                        case 'google_custom_label_0':
+                                                        case 'google_custom_label_1':
+                                                        case 'google_custom_label_2':
+                                                        case 'google_custom_label_3':
+                                                        case 'google_custom_label_4':
+                                                        case 'google_age_group':
+                                                        case 'google_gender':
+                                                        case 'google_color':
+                                                        case 'google_size':
+                                                        case 'google_material':
+                                                        case 'google_pattern':
+                                                        case 'google_condition':
+                                                        case 'google_mpn':
+                                                        case 'google_brand':
+                                                        case 'google_item_group_id':
+                                                        case 'google_custom_product':
+                                                        case 'hs_code':
+                                                        case 'country_of_origin':
+                                                        case 'weight_unit':
+                                                        case 'option1_name':
+                                                        case 'option2_name':
+                                                        case 'option3_name':
                                                             return [
                                                                 { label: "Set value", value: "fixed" },
                                                                 { label: "Clear value", value: "clear_value" },
@@ -3300,6 +3553,41 @@ export default function CreateTaskPage() {
                                                                 { label: "Add suffix", value: "add_suffix" },
                                                                 { label: "Find & Replace", value: "find_replace" },
                                                                 { label: "Replace text", value: "replace_text" },
+                                                            ];
+                                                        case 'manual_collection':
+                                                            return [
+                                                                { label: "Add to collection", value: "add_to_collection" },
+                                                                { label: "Remove from collection", value: "remove_from_collection" },
+                                                            ];
+                                                        case 'sales_channels':
+                                                        case 'market_publishing':
+                                                            return [
+                                                                { label: "Publish", value: "publish" },
+                                                                { label: "Unpublish", value: "unpublish" },
+                                                            ];
+                                                        case 'images':
+                                                            return [
+                                                                { label: "Add new image from URL", value: "add_image" },
+                                                                { label: "Set image from URL (Replace)", value: "set_image" },
+                                                                { label: "Clear all images", value: "clear_images" },
+                                                            ];
+                                                        case 'add_variants':
+                                                            return [{ label: "Add new variant (Title;Price;SKU;Opt1;Opt2;Opt3)", value: "add_variant" }];
+                                                        case 'add_options':
+                                                            return [{ label: "Add new product option (Name;Values)", value: "add_option" }];
+                                                        case 'delete_variants':
+                                                            return [{ label: "Delete selected variants", value: "delete_variants" }];
+                                                        case 'delete_products':
+                                                            return [{ label: "Delete selected products", value: "delete_products" }];
+                                                        case 'sort_variants':
+                                                            return [{ label: "Sort variants (logic-based)", value: "sort_variants" }];
+                                                        case 'reorder_options':
+                                                            return [{ label: "Reorder options (manual)", value: "reorder_options" }];
+                                                        case 'variant_management':
+                                                            return [
+                                                                { label: "Add new variant", value: "add_variant" },
+                                                                { label: "Sort variants", value: "sort_variants" },
+                                                                { label: "Add new product option", value: "add_option" },
                                                             ];
                                                         case 'weight':
                                                             return [
@@ -3351,7 +3639,17 @@ export default function CreateTaskPage() {
                                         </BlockStack>
                                         <BlockStack gap="100">
 
-                                            {fieldToEdit === 'status' ? (
+                                            {fieldToEdit === 'inventory_policy' ? (
+                                                <Select
+                                                    label="Inventory Policy"
+                                                    options={[
+                                                        { label: "Continue selling when out of stock", value: "CONTINUE" },
+                                                        { label: "Stop selling when out of stock", value: "DENY" },
+                                                    ]}
+                                                    value={editValue}
+                                                    onChange={setEditValue}
+                                                />
+                                            ) : fieldToEdit === 'status' ? (
                                                 <Select
                                                     label="Status value"
                                                     options={[
@@ -3374,12 +3672,32 @@ export default function CreateTaskPage() {
                                                         placeholder="Search or add tags"
                                                     />
                                                 </>
-                                            ) : (fieldToEdit === 'requires_shipping' || fieldToEdit === 'taxable') ? (
+                                            ) : (['requires_shipping', 'taxable'].includes(fieldToEdit)) ? (
                                                 <Select
                                                     label="Value"
                                                     options={[
                                                         { label: "True", value: "true" },
                                                         { label: "False", value: "false" },
+                                                    ]}
+                                                    value={editValue}
+                                                    onChange={setEditValue}
+                                                />
+                                            ) : (fieldToEdit === 'published') ? (
+                                                <Select
+                                                    label="Value"
+                                                    options={[
+                                                        { label: "Hidden", value: "true" },
+                                                        { label: "Visible", value: "false" },
+                                                    ]}
+                                                    value={editValue}
+                                                    onChange={setEditValue}
+                                                />
+                                            ) : (fieldToEdit === 'inventory_policy') ? (
+                                                <Select
+                                                    label="Value"
+                                                    options={[
+                                                        { label: "Deny", value: "deny" },
+                                                        { label: "Continue", value: "continue" },
                                                     ]}
                                                     value={editValue}
                                                     onChange={setEditValue}
@@ -3409,11 +3727,11 @@ export default function CreateTaskPage() {
                                                         />
                                                     </Box>
                                                 </InlineStack>
-                                            ) : (fieldToEdit === 'vendor' || fieldToEdit === 'product_type') ? (
+                                            ) : (['vendor', 'product_type', 'title', 'body_html', 'handle', 'template_suffix', 'sku', 'barcode', 'seo_title', 'seo_description', 'google_product_category', 'google_custom_label_0', 'google_custom_label_1', 'google_custom_label_2', 'google_custom_label_3', 'google_custom_label_4'].includes(fieldToEdit)) ? (
                                                 <BlockStack gap="300">
-                                                    {(editMethod === 'set_vendor' || editMethod === 'set_type' || editMethod === 'fixed') && (
+                                                    {(['set_vendor', 'set_type', 'fixed'].includes(editMethod)) && (
                                                         <TextField
-                                                            label={fieldToEdit === 'vendor' ? "Vendor Value" : "Product Type Value"}
+                                                            label={fieldToEdit === 'vendor' ? "Vendor Value" : (fieldToEdit === 'product_type' ? "Product Type Value" : "Value")}
                                                             value={editValue}
                                                             onChange={setEditValue}
                                                             autoComplete="off"
@@ -3456,7 +3774,7 @@ export default function CreateTaskPage() {
                                                         </InlineStack>
                                                     )}
                                                     {(editMethod === 'clear_vendor' || editMethod === 'clear_value' || editMethod === 'clear_type') && (
-                                                        <Text as="p" variant="bodyMd">{fieldToEdit === 'vendor' ? "Vendor" : "Product type"} will be cleared.</Text>
+                                                        <Text as="p" variant="bodyMd">{fieldToEdit === 'vendor' ? "Vendor" : (fieldToEdit === 'product_type' ? "Product type" : "Value")} will be cleared.</Text>
                                                     )}
                                                 </BlockStack>
                                             ) : (
@@ -4476,81 +4794,55 @@ export default function CreateTaskPage() {
                 <Modal.Section>
                     {(() => {
                         const { edits, scheduling, applications } = getTaskDescription();
+
+                        // Consolidated list of details for the modal
+                        const taskDetails = [...edits];
+
+                        // Add scheduling if not immediate
+                        if (startTime !== 'now') {
+                            taskDetails.push(...scheduling);
+                        }
+
+                        // Add application scope
+                        if (applyToProducts === 'all') {
+                            taskDetails.push(`Applies to all products (${productsCount} products)`);
+                        } else if (applyToProducts === 'collections') {
+                            taskDetails.push(`Applies to ${selectedCollections.length} collections`);
+                        } else if (applyToProducts === 'specific') {
+                            taskDetails.push(`Applies to ${selectedProducts.length} specific products`);
+                        } else if (applyToProducts === 'conditions') {
+                            taskDetails.push(`Applies to products matching conditions`);
+                        }
+
+                        // Add variant scope if not all
+                        if (applyToVariants !== 'all') {
+                            taskDetails.push("Only applies to specific variants matching conditions");
+                        }
+
+                        // Add other filters
+                        taskDetails.push(...applications);
+
                         return (
                             <BlockStack gap="400">
-                                <Box paddingBlockEnd="200">
+                                <Banner tone="warning">
                                     <Text as="p" variant="bodyMd">
-                                        Please confirm the following details for your bulk task:
+                                        This task will update product data directly on Shopify. Please review all settings and preview the changes carefully before running.
                                     </Text>
-                                </Box>
+                                </Banner>
 
                                 <BlockStack gap="200">
-                                    <Text as="h3" variant="headingSm">Editing rules</Text>
                                     <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
-                                        {edits.map((desc, i) => (
+                                        {taskDetails.map((desc, i) => (
                                             <li key={i}>
                                                 <Text as="span" variant="bodyMd">{desc}</Text>
                                             </li>
                                         ))}
                                     </ul>
-                                </BlockStack>
-
-                                <BlockStack gap="200">
-                                    <Text as="h3" variant="headingSm">Scheduling</Text>
-                                    <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
-                                        {scheduling.map((desc, i) => (
-                                            <li key={i}>
-                                                <Text as="span" variant="bodyMd">{desc}</Text>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </BlockStack>
-
-                                <BlockStack gap="200">
-                                    <Text as="h3" variant="headingSm">Applies to</Text>
-
-                                    <Box paddingInlineStart="200">
-                                        <BlockStack gap="200">
-                                            <Text as="p" variant="bodySm" fontWeight="bold">Product matching</Text>
-                                            <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
-                                                <li>
-                                                    <Text as="span" variant="bodyMd">
-                                                        {applyToProducts === 'all' && `All products (${productsCount} products)`}
-                                                        {applyToProducts === 'collections' && `${selectedCollections.length > 0 ? selectedCollections.length : 0} collections selected`}
-                                                        {applyToProducts === 'specific' && `${selectedProducts.length} products selected`}
-                                                        {applyToProducts === 'conditions' && `${fetcher.data?.totalCount || "?"} products matching conditions`}
-                                                    </Text>
-                                                </li>
-                                            </ul>
-
-                                            <Text as="p" variant="bodySm" fontWeight="bold">Variant matching</Text>
-                                            <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
-                                                <li>
-                                                    <Text as="span" variant="bodyMd">
-                                                        {applyToVariants === 'all' && "All variants"}
-                                                        {applyToVariants === 'conditions' && "Variants matching specific conditions"}
-                                                    </Text>
-                                                </li>
-                                            </ul>
-
-                                            {applications.length > 0 && (
-                                                <>
-                                                    <Text as="p" variant="bodySm" fontWeight="bold">Other filters</Text>
-                                                    <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
-                                                        {applications.map((desc, i) => (
-                                                            <li key={i}>
-                                                                <Text as="span" variant="bodyMd">{desc}</Text>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </>
-                                            )}
-                                        </BlockStack>
-                                    </Box>
                                 </BlockStack>
 
                                 <Box paddingBlockStart="200">
-                                    <Banner tone="warning">
+                                    <BlockStack gap="200">
+                                        <Text as="p" variant="bodyMd" fontWeight="bold">Important</Text>
                                         <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
                                             <li>
                                                 <Text as="span" variant="bodyMd">Ensure that the preview reflects the correct changes</Text>
@@ -4558,8 +4850,11 @@ export default function CreateTaskPage() {
                                             <li>
                                                 <Text as="span" variant="bodyMd">Avoid making any manual product updates while the task is running</Text>
                                             </li>
+                                            <li>
+                                                <Text as="span" variant="bodyMd">If the task does not execute correctly, please contact us before reverting any changes</Text>
+                                            </li>
                                         </ul>
-                                    </Banner>
+                                    </BlockStack>
                                 </Box>
                             </BlockStack>
                         );
@@ -4782,12 +5077,34 @@ function PreviewTable({
             { title: "Updated Tags" }
         ];
     } else if (fieldToEdit !== 'tags') {
-        // Fallback or other fields
+        const fieldLabel = ({
+            vendor: "Vendor",
+            product_type: "Product Type",
+            requires_shipping: "Requires Shipping",
+            taxable: "Taxable",
+            title: "Title",
+            body_html: "Body HTML",
+            handle: "Handle",
+            template_suffix: "Template Suffix",
+            published: "Published Status",
+            inventory_policy: "Inventory Policy",
+            sku: "SKU",
+            barcode: "Barcode",
+            seo_title: "SEO Title",
+            seo_description: "SEO Description",
+            google_product_category: "Google: Product Category",
+            google_custom_label_0: "Google: Custom Label 0",
+            google_custom_label_1: "Google: Custom Label 1",
+            google_custom_label_2: "Google: Custom Label 2",
+            google_custom_label_3: "Google: Custom Label 3",
+            google_custom_label_4: "Google: Custom Label 4"
+        } as any)[fieldToEdit] || fieldToEdit;
+
         columns = [
             { title: "Image" },
             { title: "Product" },
-            { title: `Original ${fieldToEdit}` },
-            { title: `New ${fieldToEdit}` }
+            { title: `Original ${fieldLabel}` },
+            { title: `New ${fieldLabel}` }
         ];
     }
     const showSidebarTags = (addTags && (tagsToAdd || []).length > 0) || (removeTags && (tagsToRemove || []).length > 0);
@@ -4955,8 +5272,21 @@ function PreviewTable({
 
                         ) : (
                             <>
-                                <IndexTable.Cell><Text variant="bodyMd" as="span">{row.originalVal}</Text></IndexTable.Cell>
-                                <IndexTable.Cell><Text variant="bodyMd" fontWeight="bold" as="span">{row.updateVal}</Text></IndexTable.Cell>
+                                {(() => {
+                                    const formatVal = (val: any) => {
+                                        if (val === undefined || val === null || val === "") return "(empty)";
+                                        if (fieldToEdit === 'published') return String(val).toLowerCase() === 'true' ? 'Visible' : 'Hidden';
+                                        if (fieldToEdit === 'inventory_policy') return String(val).toUpperCase() === 'CONTINUE' ? 'Continue' : 'Deny';
+                                        if (fieldToEdit === 'requires_shipping' || fieldToEdit === 'taxable') return String(val).toLowerCase() === 'true' || val === true ? 'Yes' : 'No';
+                                        return String(val);
+                                    };
+                                    return (
+                                        <>
+                                            <IndexTable.Cell><Text variant="bodyMd" as="span">{formatVal(row.originalVal)}</Text></IndexTable.Cell>
+                                            <IndexTable.Cell><Text variant="bodyMd" fontWeight="bold" as="span">{formatVal(row.updateVal)}</Text></IndexTable.Cell>
+                                        </>
+                                    );
+                                })()}
                             </>
                         )}
 

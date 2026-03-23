@@ -35,13 +35,28 @@ type Pages = {
   "/auth/login": {
     params: {};
   };
+  "/changelog": {
+    params: {};
+  };
   "/api/cron": {
+    params: {};
+  };
+  "/tutorial": {
+    params: {};
+  };
+  "/pricing": {
+    params: {};
+  };
+  "/privacy": {
     params: {};
   };
   "/auth/*": {
     params: {
       "*": string;
     };
+  };
+  "/terms": {
+    params: {};
   };
   "/app": {
     params: {};
@@ -86,12 +101,15 @@ type Pages = {
   "/app/tasks/new": {
     params: {};
   };
+  "/faq": {
+    params: {};
+  };
 };
 
 type RouteFiles = {
   "root.jsx": {
     id: "root";
-    page: "/" | "/webhooks/customers/data_request" | "/webhooks/app/scopes_update" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/webhooks/shop/redact" | "/webhooks/gdpr" | "/auth/login" | "/api/cron" | "/auth/*" | "/app" | "/app/support-admin/:shopDomain" | "/app/support-admin" | "/app/owner-dashboard" | "/app/email-preview" | "/app/preview-data" | "/app/create-demo" | "/app/additional" | "/app/settings" | "/app/plans" | "/app/tasks" | "/app/tasks/:id" | "/app/tasks/new";
+    page: "/" | "/webhooks/customers/data_request" | "/webhooks/app/scopes_update" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/webhooks/shop/redact" | "/webhooks/gdpr" | "/auth/login" | "/changelog" | "/api/cron" | "/tutorial" | "/pricing" | "/privacy" | "/auth/*" | "/terms" | "/app" | "/app/support-admin/:shopDomain" | "/app/support-admin" | "/app/owner-dashboard" | "/app/email-preview" | "/app/preview-data" | "/app/create-demo" | "/app/additional" | "/app/settings" | "/app/plans" | "/app/tasks" | "/app/tasks/:id" | "/app/tasks/new" | "/faq";
   };
   "routes/webhooks.customers.data_request.jsx": {
     id: "routes/webhooks.customers.data_request";
@@ -121,9 +139,25 @@ type RouteFiles = {
     id: "routes/auth.login";
     page: "/auth/login";
   };
+  "routes/changelog.jsx": {
+    id: "routes/changelog";
+    page: "/changelog";
+  };
   "routes/api.cron.ts": {
     id: "routes/api.cron";
     page: "/api/cron";
+  };
+  "routes/tutorial.jsx": {
+    id: "routes/tutorial";
+    page: "/tutorial";
+  };
+  "routes/pricing.jsx": {
+    id: "routes/pricing";
+    page: "/pricing";
+  };
+  "routes/privacy.jsx": {
+    id: "routes/privacy";
+    page: "/privacy";
   };
   "routes/_index/route.jsx": {
     id: "routes/_index";
@@ -132,6 +166,10 @@ type RouteFiles = {
   "routes/auth.$.jsx": {
     id: "routes/auth.$";
     page: "/auth/*";
+  };
+  "routes/terms.jsx": {
+    id: "routes/terms";
+    page: "/terms";
   };
   "routes/app.jsx": {
     id: "routes/app";
@@ -193,6 +231,10 @@ type RouteFiles = {
     id: "routes/app.tasks.new";
     page: "/app/tasks/new";
   };
+  "routes/faq.jsx": {
+    id: "routes/faq";
+    page: "/faq";
+  };
 };
 
 type RouteModules = {
@@ -204,9 +246,14 @@ type RouteModules = {
   "routes/webhooks.shop.redact": typeof import("./app/routes/webhooks.shop.redact.jsx");
   "routes/webhooks.gdpr": typeof import("./app/routes/webhooks.gdpr.jsx");
   "routes/auth.login": typeof import("./app/routes/auth.login.jsx");
+  "routes/changelog": typeof import("./app/routes/changelog.jsx");
   "routes/api.cron": typeof import("./app/routes/api.cron.ts");
+  "routes/tutorial": typeof import("./app/routes/tutorial.jsx");
+  "routes/pricing": typeof import("./app/routes/pricing.jsx");
+  "routes/privacy": typeof import("./app/routes/privacy.jsx");
   "routes/_index": typeof import("./app/routes/_index/route.jsx");
   "routes/auth.$": typeof import("./app/routes/auth.$.jsx");
+  "routes/terms": typeof import("./app/routes/terms.jsx");
   "routes/app": typeof import("./app/routes/app.jsx");
   "routes/app.support-admin.$shopDomain": typeof import("./app/routes/app.support-admin.$shopDomain.jsx");
   "routes/app.support-admin._index": typeof import("./app/routes/app.support-admin._index.jsx");
@@ -222,4 +269,5 @@ type RouteModules = {
   "routes/app.tasks._index": typeof import("./app/routes/app.tasks._index.tsx");
   "routes/app.tasks.$id": typeof import("./app/routes/app.tasks.$id.tsx");
   "routes/app.tasks.new": typeof import("./app/routes/app.tasks.new.tsx");
+  "routes/faq": typeof import("./app/routes/faq.jsx");
 };

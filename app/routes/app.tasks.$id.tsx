@@ -8,7 +8,7 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { EditIcon, SearchIcon, ExportIcon, ImportIcon, ArchiveIcon, ChevronLeftIcon, NoteIcon, ImageIcon, PlayIcon, UndoIcon } from "@shopify/polaris-icons";
 import { runJob, revertJob, processPendingJobs } from "../services/bulk-update.server";
-import { getTaskDescriptionList, getAppliesToText } from "../utils/task-descriptions";
+import { getTaskDescriptionList, getAppliesToText, FIELD_LABELS } from "../utils/task-descriptions";
 import { sendTaskScheduledEmail, sendRevertScheduledEmail } from "../services/email.server";
 import { ADMIN_ALLOWLIST } from "../constants";
 import type { LoaderFunctionArgs } from "react-router";
@@ -360,13 +360,27 @@ export default function TaskDetail() {
 
     const handleExport = () => {
         if (!products.length) return;
-        const headers = ["Product", "Variant ID", "Original Price", "Updated Price", "Compare At", "Updated Compare At"];
+        const fieldToEdit = (task.configuration as any)?.fieldToEdit || 'price';
+        let fieldLabel = FIELD_LABELS[fieldToEdit] || "Value";
+
+        // Handle dynamic prefixes for export headers
+        if (fieldToEdit.startsWith('metafield:')) {
+            fieldLabel = "Metafield";
+        } else if (fieldToEdit.startsWith('publication:')) {
+            fieldLabel = "Sales Channels";
+        } else if (fieldToEdit.startsWith('market_publishing:')) {
+            fieldLabel = "Market Publishing";
+        } else if (fieldToEdit.startsWith('market_price:')) {
+            fieldLabel = "Market Price";
+        }
+
+        const headers = ["Product", "Variant ID", `Original ${fieldLabel}`, `Updated ${fieldLabel}`];
         const csvContent = [
             headers.join(","),
             ...products.map((p: any) => {
                 const original = task.revertStatus === 'reverted' ? p.updated : p.original;
                 const updated = task.revertStatus === 'reverted' ? p.original : p.updated;
-                return `"${p.title.replace(/"/g, '""')}","", "${original}", "${updated}", "${p.original_compare || ""}", "${p.updated_compare || ""}"`
+                return `"${(p.title || "").replace(/"/g, '""')}","${p.variantId || ""}", "${original || ""}", "${updated || ""}"`
             })
         ].join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -781,19 +795,39 @@ export default function TaskDetail() {
                                                 // Remove secondary tag columns from main table (moved to sidebar)
 
                                                 if (!showPrice && !showCompareAt && !showCost) {
-                                                    if (fieldToEdit === 'requires_shipping') {
-                                                        headings.push({ title: "Original Requires Shipping" });
-                                                        headings.push({ title: "Updated Requires Shipping" });
-                                                    } else if (fieldToEdit === 'taxable') {
-                                                        headings.push({ title: "Original Taxable" });
-                                                        headings.push({ title: "Updated Taxable" });
-                                                    } else if (fieldToEdit === 'tags') {
-                                                        headings.push({ title: "Original Tags" });
-                                                        headings.push({ title: "Updated Tags" });
-                                                    } else {
-                                                        headings.push({ title: "Original Value" });
-                                                        headings.push({ title: "Updated Value" });
-                                                    }
+                                                    const fieldLabel = ({
+                                                        price: "Price",
+                                                        compare_price: "Compare at Price",
+                                                        cost: "Cost",
+                                                        inventory: "Inventory",
+                                                        tags: "Tags",
+                                                        status: "Status",
+                                                        metafield: "Metafield",
+                                                        weight: "Weight",
+                                                        vendor: "Vendor",
+                                                        product_type: "Product Type",
+                                                        requires_shipping: "Requires Shipping",
+                                                        taxable: "Taxable",
+                                                        title: "Title",
+                                                        body_html: "Body HTML",
+                                                        handle: "Handle",
+                                                        template_suffix: "Template Suffix",
+                                                        published: "Published Status",
+                                                        inventory_policy: "Inventory Policy",
+                                                        sku: "SKU",
+                                                        barcode: "Barcode",
+                                                        seo_title: "SEO Title",
+                                                        seo_description: "SEO Description",
+                                                        google_product_category: "Google: Product Category",
+                                                        google_custom_label_0: "Google: Custom Label 0",
+                                                        google_custom_label_1: "Google: Custom Label 1",
+                                                        google_custom_label_2: "Google: Custom Label 2",
+                                                        google_custom_label_3: "Google: Custom Label 3",
+                                                        google_custom_label_4: "Google: Custom Label 4"
+                                                    } as any)[fieldToEdit] || "Value";
+
+                                                    headings.push({ title: task.revertStatus === 'reverted' ? `Updated ${fieldLabel}` : `Original ${fieldLabel}` });
+                                                    headings.push({ title: task.revertStatus === 'reverted' ? `Reverted ${fieldLabel}` : `Updated ${fieldLabel}` });
                                                 }
                                                 const showSidebarTags = config.addTags || config.removeTags;
                                                 if (showSidebarTags && fieldToEdit !== 'tags') {
@@ -939,32 +973,46 @@ export default function TaskDetail() {
 
                                                                             {!showPrice && !showCompareAt && !showCost && (
                                                                                 <>
-                                                                                    <IndexTable.Cell>
-                                                                                        {fieldToEdit === 'tags' ? (
-                                                                                            <InlineStack gap="100" wrap={true}>
-                                                                                                {((task.revertStatus === 'reverted' ? item.updated : item.original) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
-                                                                                                    <Badge key={i} tone="attention">{tag.trim()}</Badge>
-                                                                                                ))}
-                                                                                            </InlineStack>
-                                                                                        ) : (
-                                                                                            <Text variant="bodyMd" tone="subdued" as="span">
-                                                                                                {task.revertStatus === 'reverted' ? item.updated : item.original}
-                                                                                            </Text>
-                                                                                        )}
-                                                                                    </IndexTable.Cell>
-                                                                                    <IndexTable.Cell>
-                                                                                        {fieldToEdit === 'tags' ? (
-                                                                                            <InlineStack gap="100" wrap={true}>
-                                                                                                {((task.revertStatus === 'reverted' ? item.original : item.updated) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
-                                                                                                    <Badge key={i} tone="success">{tag.trim()}</Badge>
-                                                                                                ))}
-                                                                                            </InlineStack>
-                                                                                        ) : (
-                                                                                            <Text variant="bodyMd" fontWeight="bold" as="span">
-                                                                                                {task.revertStatus === 'reverted' ? item.original : item.updated}
-                                                                                            </Text>
-                                                                                        )}
-                                                                                    </IndexTable.Cell>
+                                                                                    {(() => {
+                                                                                        const formatValue = (val: any) => {
+                                                                                            if (val === undefined || val === null || val === "") return "(empty)";
+                                                                                            if (fieldToEdit === 'published') return String(val).toLowerCase() === 'true' ? 'Visible' : 'Hidden';
+                                                                                            if (fieldToEdit === 'inventory_policy') return String(val).toUpperCase() === 'CONTINUE' ? 'Continue' : 'Deny';
+                                                                                            if (fieldToEdit === 'requires_shipping' || fieldToEdit === 'taxable') return String(val).toLowerCase() === 'true' || val === true ? 'Yes' : 'No';
+                                                                                            return String(val);
+                                                                                        };
+
+                                                                                        return (
+                                                                                            <>
+                                                                                                <IndexTable.Cell>
+                                                                                                    {fieldToEdit === 'tags' ? (
+                                                                                                        <InlineStack gap="100" wrap={true}>
+                                                                                                            {((task.revertStatus === 'reverted' ? item.updated : item.original) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
+                                                                                                                <Badge key={i} tone="attention">{tag.trim()}</Badge>
+                                                                                                            ))}
+                                                                                                        </InlineStack>
+                                                                                                    ) : (
+                                                                                                        <Text variant="bodyMd" tone="subdued" as="span">
+                                                                                                            {formatValue(task.revertStatus === 'reverted' ? item.updated : item.original)}
+                                                                                                        </Text>
+                                                                                                    )}
+                                                                                                </IndexTable.Cell>
+                                                                                                <IndexTable.Cell>
+                                                                                                    {fieldToEdit === 'tags' ? (
+                                                                                                        <InlineStack gap="100" wrap={true}>
+                                                                                                            {((task.revertStatus === 'reverted' ? item.original : item.updated) || "").split(",").filter(Boolean).map((tag: string, i: number) => (
+                                                                                                                <Badge key={i} tone="success">{tag.trim()}</Badge>
+                                                                                                            ))}
+                                                                                                        </InlineStack>
+                                                                                                    ) : (
+                                                                                                        <Text variant="bodyMd" fontWeight="bold" as="span">
+                                                                                                            {formatValue(task.revertStatus === 'reverted' ? item.original : item.updated)}
+                                                                                                        </Text>
+                                                                                                    )}
+                                                                                                </IndexTable.Cell>
+                                                                                            </>
+                                                                                        );
+                                                                                    })()}
                                                                                 </>
                                                                             )}
 

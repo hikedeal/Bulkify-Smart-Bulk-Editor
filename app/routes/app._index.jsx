@@ -41,6 +41,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { isProPlan } from "../utils/billing";
+import { FIELD_LABELS } from "../utils/task-descriptions";
 
 export const loader = async ({ request }) => {
   const { session, admin, redirect: shopifyRedirect } = await authenticate.admin(request);
@@ -291,6 +292,12 @@ export default function Index() {
     { title: "Edit Weight", desc: "Update shipping weights", type: "weight", icon: PackageIcon, color: "#fff1f2", tone: "critical", isPro: true },
     { title: "Tax Settings", desc: "Toggle taxable status", type: "taxable", icon: CheckCircleIcon, color: "#f0fdf4", tone: "success", isPro: true },
     { title: "Shipping", desc: "Requires shipping toggle", type: "requires_shipping", icon: GlobeIcon, color: "#e0f2fe", tone: "info", isPro: true },
+    { title: "SEO Title/Desc", desc: "Edit search metadata", type: "seo_title", icon: SearchIcon, color: "#f0fdfa", tone: "success", isPro: true },
+    { title: "Market Price", desc: "Localized pricing", type: "market_price", icon: GlobeIcon, color: "#eff6ff", tone: "info", isPro: true },
+    { title: "Sales Channels", desc: "Publish/Unpublish", type: "sales_channels", icon: StoreIcon, color: "#fdf2f8", tone: "info", isPro: true },
+    { title: "SKU & Barcode", desc: "Update identifiers", type: "sku", icon: HashtagIcon, color: "#f1f5f9", tone: "base", isPro: true },
+    { title: "Variant Manager", desc: "Add/Delete variants", type: "add_variants", icon: PlusIcon, color: "#f0fdf4", tone: "success", isPro: true },
+    { title: "Market Publishing", desc: "Manage market visibility", type: "market_publishing", icon: GlobeIcon, color: "#fff7ed", tone: "warning", isPro: true },
   ];
 
   return (
@@ -421,23 +428,30 @@ export default function Index() {
                 >
                   {recentJobs.map((job, index) => {
                     const config = job.configuration || {};
-                    const fieldLabel = {
-                      price: "Price",
-                      compare_price: "Compare Price",
-                      cost: "Cost",
-                      inventory: "Inventory",
-                      tags: "Tags",
-                      status: "Status",
-                      metafield: "Metafield"
-                    }[config.fieldToEdit] || config.fieldToEdit;
+                    let fieldLabel = FIELD_LABELS[config.fieldToEdit] || config.fieldToEdit || "Price";
+
+                    // Handle dynamic prefixes in dashboard
+                    if (typeof config.fieldToEdit === 'string') {
+                      if (config.fieldToEdit.startsWith('metafield:')) {
+                        fieldLabel = "Metafield";
+                      } else if (config.fieldToEdit.startsWith('publication:')) {
+                        fieldLabel = "Sales Channels";
+                      } else if (config.fieldToEdit.startsWith('market_publishing:')) {
+                        fieldLabel = "Market Publishing";
+                      } else if (config.fieldToEdit.startsWith('market_price:')) {
+                        fieldLabel = "Market Price";
+                      }
+                    }
 
                     let configSummary = "";
                     if (config.fieldToEdit === 'status') {
                       configSummary = `Set to ${config.editValue}`;
                     } else if (config.fieldToEdit === 'tags') {
                       configSummary = config.editMethod === 'add_tags' ? "Add tags" : (config.editMethod === 'remove_tags' ? "Remove tags" : "Replace tags");
-                    } else if (config.fieldToEdit === 'metafield') {
+                    } else if (config.fieldToEdit?.startsWith('metafield:')) {
                       configSummary = `${config.metafieldNamespace}.${config.metafieldKey} = ${config.editValue}`;
+                    } else if (config.fieldToEdit?.startsWith('publication:') || config.fieldToEdit?.startsWith('market_publishing:')) {
+                      configSummary = config.editMethod === 'publish' ? `Publish ${config.editValue}` : `Unpublish ${config.editValue}`;
                     } else {
                       const isPercentage = config.editMethod?.includes("percentage");
                       const action = config.editMethod?.includes("inc") ? "+" : (config.editMethod?.includes("dec") ? "-" : "");

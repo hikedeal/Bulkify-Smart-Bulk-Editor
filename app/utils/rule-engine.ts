@@ -28,8 +28,37 @@ export interface VariantData {
     requiresShipping?: boolean;
     taxable?: boolean;
     sku?: string;
+    barcode?: string;
+    inventoryPolicy?: string;
     title?: string;
+    hsCode?: string;
+    countryCodeOfOrigin?: string;
     [key: string]: any;
+}
+
+export function applyTextEdit(originalText: string, method: string, inputs: { value?: string, findText?: string, replaceText?: string, prefixValue?: string, suffixValue?: string }) {
+    const original = originalText || "";
+    switch (method) {
+        case 'fixed':
+        case 'set_value':
+        case 'set_vendor':
+        case 'set_type':
+            return inputs.value || "";
+        case 'clear_value':
+        case 'clear_vendor':
+        case 'clear_type':
+            return "";
+        case 'add_prefix':
+            return (inputs.prefixValue || "") + original;
+        case 'add_suffix':
+            return original + (inputs.suffixValue || "");
+        case 'find_replace':
+        case 'replace_text':
+            if (!inputs.findText) return original;
+            return original.split(inputs.findText).join(inputs.replaceText || "");
+        default:
+            return original;
+    }
 }
 
 export function applyRounding(value: number, method: string, roundingValue?: string): string {
@@ -155,8 +184,8 @@ export function applyRulesToVariant(variant: VariantData, config: TaskConfigurat
         }
     }
 
-    let primaryOriginal = originalPrice;
-    let primaryUpdated: number | boolean = updatedPrice;
+    let primaryOriginal: number | boolean | string = originalPrice;
+    let primaryUpdated: number | boolean | string = updatedPrice;
 
     if (fieldToEdit === 'compare_price') {
         primaryOriginal = originalCompareAt;
@@ -207,6 +236,35 @@ export function applyRulesToVariant(variant: VariantData, config: TaskConfigurat
     } else if (fieldToEdit === 'taxable') {
         primaryOriginal = variant.taxable ? 1 : 0;
         primaryUpdated = String(config.editValue).toLowerCase() === 'true';
+    } else if (['sku', 'barcode', 'inventory_policy', 'hs_code', 'country_of_origin', 'weight_unit'].includes(fieldToEdit)) {
+        let originalText = "";
+        if (fieldToEdit === 'sku') originalText = variant.sku || "";
+        else if (fieldToEdit === 'barcode') originalText = variant.barcode || "";
+        else if (fieldToEdit === 'inventory_policy') originalText = variant.inventoryPolicy || "";
+        else if (fieldToEdit === 'hs_code') originalText = variant.hsCode || "";
+        else if (fieldToEdit === 'country_of_origin') originalText = variant.countryCodeOfOrigin || "";
+        else if (fieldToEdit === 'weight_unit') originalText = variant.weightUnit || "";
+
+        const newVal = applyTextEdit(originalText, editMethod, {
+            value: editValue,
+            findText: config.findText,
+            replaceText: config.replaceText,
+            prefixValue: editValue,
+            suffixValue: editValue
+        });
+        primaryOriginal = originalText;
+        primaryUpdated = newVal;
+    } else if (fieldToEdit === 'inventory_quantity') {
+        const baseVal = originalInventory;
+        let newVal = baseVal;
+        if (editMethod === 'fixed') newVal = numEditValue;
+        else if (editMethod === 'amount_inc') newVal = baseVal + numEditValue;
+        else if (editMethod === 'amount_dec') newVal = baseVal - numEditValue;
+
+        if (newVal < 0) newVal = 0;
+        updatedInventory = Math.round(newVal);
+        primaryOriginal = baseVal;
+        primaryUpdated = updatedInventory;
     }
 
     let originalValFormatted: any = variant[fieldToEdit];
@@ -220,7 +278,7 @@ export function applyRulesToVariant(variant: VariantData, config: TaskConfigurat
     let updatedValFormatted: any = primaryUpdated;
 
     if (['price', 'compare_price', 'cost'].includes(fieldToEdit)) {
-        originalValFormatted = primaryOriginal.toFixed(2);
+        originalValFormatted = (primaryOriginal as number).toFixed(2);
         updatedValFormatted = (primaryUpdated as number).toFixed(2);
     } else if (fieldToEdit === 'weight') {
         originalValFormatted = `${originalWeight.toFixed(3)} ${variant.weightUnit || ""}`;
@@ -230,6 +288,12 @@ export function applyRulesToVariant(variant: VariantData, config: TaskConfigurat
         const originalBool = fieldToEdit === 'requires_shipping' ? variant.requiresShipping : variant.taxable;
         originalValFormatted = originalBool ? 'Yes' : 'No';
         updatedValFormatted = primaryUpdated ? 'Yes' : 'No';
+    } else if (['sku', 'barcode', 'inventory_policy', 'hs_code', 'country_of_origin', 'weight_unit'].includes(fieldToEdit)) {
+        originalValFormatted = primaryOriginal || "(empty)";
+        updatedValFormatted = primaryUpdated || "(empty)";
+    } else if (fieldToEdit === 'inventory_quantity') {
+        originalValFormatted = originalInventory.toString();
+        updatedValFormatted = (primaryUpdated as number).toString();
     }
 
     // If original was "Not tracked", make updated also "Not tracked" to signal no change

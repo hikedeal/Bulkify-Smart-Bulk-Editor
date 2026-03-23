@@ -47,7 +47,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { useLoaderData, useNavigate, useRevalidator, useSubmit } from "react-router";
 import { sendTaskScheduledEmail, sendRevertScheduledEmail } from "../services/email.server";
-import { getTaskDescriptionList, getAppliesToText } from "../utils/task-descriptions";
+import { getTaskDescriptionList, getAppliesToText, FIELD_LABELS } from "../utils/task-descriptions";
 
 interface Task {
     id: string;
@@ -489,6 +489,8 @@ export default function BulkEditTasksPage() {
         { content: "Edit Vendor", onAction: () => navigate("/app/tasks/new?type=vendor") },
         { content: "Edit Product Type", onAction: () => navigate("/app/tasks/new?type=product_type") },
         { content: "Edit Weight", onAction: () => navigate("/app/tasks/new?type=weight") },
+        { content: "Edit SKU", onAction: () => navigate("/app/tasks/new?type=sku") },
+        { content: "Edit Barcode", onAction: () => navigate("/app/tasks/new?type=barcode") },
     ];
 
     const contentMarkup = useMemo(() => {
@@ -585,6 +587,22 @@ export default function BulkEditTasksPage() {
                                     { content: 'Requires shipping', onAction: () => navigate("/app/tasks/new?type=requires_shipping") },
                                     { content: 'Taxable', onAction: () => navigate("/app/tasks/new?type=taxable") },
                                     { content: 'Metafield', onAction: () => navigate("/app/tasks/new?type=metafield") },
+                                    { content: 'Title', onAction: () => navigate("/app/tasks/new?type=title") },
+                                    { content: 'Body HTML', onAction: () => navigate("/app/tasks/new?type=body_html") },
+                                    { content: 'Handle', onAction: () => navigate("/app/tasks/new?type=handle") },
+                                    { content: 'Template Suffix', onAction: () => navigate("/app/tasks/new?type=template_suffix") },
+                                    { content: 'Published Status', onAction: () => navigate("/app/tasks/new?type=published") },
+                                    { content: 'Inventory Policy', onAction: () => navigate("/app/tasks/new?type=inventory_policy") },
+                                    { content: 'SKU', onAction: () => navigate("/app/tasks/new?type=sku") },
+                                    { content: 'Barcode', onAction: () => navigate("/app/tasks/new?type=barcode") },
+                                    { content: 'SEO Title', onAction: () => navigate("/app/tasks/new?type=seo_title") },
+                                    { content: 'SEO Description', onAction: () => navigate("/app/tasks/new?type=seo_description") },
+                                    { content: 'Google Product Category', onAction: () => navigate("/app/tasks/new?type=google_product_category") },
+                                    { content: 'Google Custom Label 0', onAction: () => navigate("/app/tasks/new?type=google_custom_label_0") },
+                                    { content: 'Google Custom Label 1', onAction: () => navigate("/app/tasks/new?type=google_custom_label_1") },
+                                    { content: 'Google Custom Label 2', onAction: () => navigate("/app/tasks/new?type=google_custom_label_2") },
+                                    { content: 'Google Custom Label 3', onAction: () => navigate("/app/tasks/new?type=google_custom_label_3") },
+                                    { content: 'Google Custom Label 4', onAction: () => navigate("/app/tasks/new?type=google_custom_label_4") },
                                 ]}
                             />
                         </Popover>
@@ -831,22 +849,19 @@ function TaskTable({ tasks, activePopoverId, togglePopover, handleAction }: {
         const appliesTo = getAppliesToText(configuration || {});
         const rules = getTaskDescriptionList(configuration || {}).join(" • ");
 
-        let fieldLabel = "Price";
-        if (configuration?.fieldToEdit) {
-            fieldLabel = {
-                price: "Price",
-                compare_price: "Compare Price",
-                cost: "Cost",
-                inventory: "Inventory",
-                tags: "Tags",
-                status: "Status",
-                metafield: "Metafield",
-                weight: "Weight",
-                vendor: "Vendor",
-                product_type: "Product type",
-                requires_shipping: "Requires shipping",
-                taxable: "Taxable"
-            }[configuration.fieldToEdit as string] || configuration.fieldToEdit;
+        let fieldLabel = FIELD_LABELS[configuration?.fieldToEdit as string] || configuration?.fieldToEdit || "Price";
+
+        // Special handling for dynamic prefixes in the history table
+        if (typeof configuration?.fieldToEdit === 'string') {
+            if (configuration.fieldToEdit.startsWith('metafield:')) {
+                fieldLabel = "Metafield";
+            } else if (configuration.fieldToEdit.startsWith('publication:')) {
+                fieldLabel = "Sales Channels";
+            } else if (configuration.fieldToEdit.startsWith('market_publishing:')) {
+                fieldLabel = "Market Publishing";
+            } else if (configuration.fieldToEdit.startsWith('market_price:')) {
+                fieldLabel = "Market Price";
+            }
         }
 
         let progressText: React.ReactNode = "";

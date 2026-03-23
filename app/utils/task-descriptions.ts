@@ -1,4 +1,62 @@
 
+export const FIELD_LABELS: Record<string, string> = {
+    price: "Price",
+    compare_price: "Compare at price",
+    cost: "Cost",
+    inventory: "Inventory",
+    tags: "Tags",
+    status: "Status",
+    metafield: "Metafield",
+    weight: "Weight",
+    vendor: "Vendor",
+    product_type: "Product type",
+    requires_shipping: "Requires shipping",
+    taxable: "Taxable",
+    title: "Title",
+    body_html: "Description (HTML)",
+    handle: "URL Handle",
+    template_suffix: "Template Suffix",
+    published: "Published Status",
+    seo_title: "SEO Title",
+    seo_description: "SEO Description",
+    sku: "SKU",
+    barcode: "Barcode",
+    inventory_policy: "Inventory Policy",
+    google_product_category: "Google Product Category",
+    google_age_group: "Google Age Group",
+    google_gender: "Google Gender",
+    google_color: "Google Color",
+    google_size: "Google Size",
+    google_material: "Google Material",
+    google_pattern: "Google Pattern",
+    google_condition: "Google Condition",
+    google_mpn: "Google MPN",
+    google_brand: "Google Brand",
+    google_custom_label_0: "Google Custom Label 0",
+    google_custom_label_1: "Google Custom Label 1",
+    google_custom_label_2: "Google Custom Label 2",
+    google_custom_label_3: "Google Custom Label 3",
+    google_custom_label_4: "Google Custom Label 4",
+    weight_unit: "Weight Unit",
+    hs_code: "HS Code",
+    country_of_origin: "Country of Origin",
+    inventory_quantity: "Inventory Quantity",
+    images: "Images/Media",
+    manual_collection: "Manual Collection",
+    option1_name: "Option 1 Name",
+    option2_name: "Option 2 Name",
+    option3_name: "Option 3 Name",
+    sales_channels: "Sales Channels",
+    market_publishing: "Market Publishing",
+    add_variants: "Add Variants",
+    add_options: "Add Options",
+    delete_variants: "Delete Variants",
+    delete_products: "Delete Products",
+    sort_variants: "Sort Variants",
+    reorder_options: "Reorder Options",
+    connect_locations: "Connect Locations"
+};
+
 export function getTaskDescriptionList(config: any, shopCurrency: string = "$"): string[] {
     const fieldToEdit = config.fieldToEdit || 'price';
     const editMethod = config.editMethod || 'fixed';
@@ -13,24 +71,16 @@ export function getTaskDescriptionList(config: any, shopCurrency: string = "$"):
     const priceEditValue = config.priceEditValue || '';
 
     const descriptions: string[] = [];
-    const fieldLabels: Record<string, string> = {
-        price: "Price",
-        compare_price: "Compare at price",
-        cost: "Cost",
-        inventory: "Inventory",
-        tags: "Tags",
-        status: "Status",
-        metafield: "Metafield",
-        weight: "Weight",
-        vendor: "Vendor",
-        product_type: "Product type",
-        requires_shipping: "Requires shipping",
-        taxable: "Taxable"
-    };
-    const fieldLabel = fieldLabels[fieldToEdit] || fieldToEdit;
+    
+    let fieldLabel = FIELD_LABELS[fieldToEdit] || fieldToEdit;
+
+    // Handle Market Price context
+    if (fieldToEdit === 'price' && config.applyToMarkets === true && config.applyToBasePrice === false) {
+        fieldLabel = "Market Price";
+    }
 
     if (fieldToEdit === 'status') {
-        descriptions.push(`Set status to "${editValue || 'Active'}"`);
+        DescriptionsSetStatus(descriptions, editValue);
     } else if (fieldToEdit === 'requires_shipping' || fieldToEdit === 'taxable') {
         const val = editValue === 'true' ? 'True' : 'False';
         descriptions.push(`Set ${fieldLabel} to "${val}"`);
@@ -38,9 +88,6 @@ export function getTaskDescriptionList(config: any, shopCurrency: string = "$"):
         const unit = config.weightUnit || 'kg';
         const method = editMethod === 'fixed' ? 'fixed value' : (editMethod.includes('inc') ? 'increase' : 'decrease');
         descriptions.push(`${fieldLabel} (${method}): ${editValue}${unit}`);
-    } else if (fieldToEdit === 'vendor' || fieldToEdit === 'product_type') {
-        const method = editMethod === 'replace_text' ? 'replace text' : 'fixed value';
-        descriptions.push(`${fieldLabel} (${method}): "${editValue}"`);
     } else if (fieldToEdit === 'tags') {
         const method = editMethod === 'add_tags' ? 'Add tags' : (editMethod === 'remove_tags' ? 'Remove tags' : 'Replace tags');
         const tags = editValue;
@@ -58,7 +105,9 @@ export function getTaskDescriptionList(config: any, shopCurrency: string = "$"):
             increase_percent: "increase by percent",
             decrease_percent: "decrease by percent",
             fixed_true: "set to true",
-            fixed_false: "set to false"
+            fixed_false: "set to false",
+            add_prefix: "add prefix",
+            add_suffix: "add suffix"
         };
         const methodLabel = methodLabels[editMethod] || editMethod;
 
@@ -72,6 +121,30 @@ export function getTaskDescriptionList(config: any, shopCurrency: string = "$"):
         } else {
             descriptions.push(`${mLabel} (${methodLabel}): "${editValue}"`);
         }
+    } else if (fieldToEdit === 'sales_channels' || fieldToEdit === 'market_publishing') {
+        const action = editMethod === 'publish' ? 'Publish to' : 'Unpublish from';
+        descriptions.push(`${fieldLabel}: ${action} ${editValue}`);
+    } else if (['vendor', 'product_type', 'title', 'body_html', 'handle', 'template_suffix', 'seo_title', 'seo_description', 'sku', 'barcode', 'inventory_policy', 'google_product_category', 'google_age_group', 'google_gender', 'google_color', 'google_size', 'google_material', 'google_pattern', 'google_condition', 'google_mpn', 'google_brand', 'google_custom_label_0', 'google_custom_label_1', 'google_custom_label_2', 'google_custom_label_3', 'google_custom_label_4', 'weight_unit', 'hs_code', 'country_of_origin', 'inventory_quantity', 'images', 'manual_collection', 'option1_name', 'option2_name', 'option3_name', 'add_variants', 'add_options', 'delete_variants', 'delete_products', 'sort_variants', 'reorder_options', 'connect_locations'].includes(fieldToEdit)) {
+        const methodLabels: any = {
+            fixed: "fixed value",
+            add_prefix: "add prefix",
+            add_suffix: "add suffix",
+            replace_text: "replace text",
+            clear_value: "clear value"
+        };
+        const methodLabel = methodLabels[editMethod] || editMethod;
+        if (editMethod === 'clear_value') {
+            descriptions.push(`${fieldLabel} (${methodLabel})`);
+        } else {
+            let val = editValue;
+            if (fieldToEdit === 'inventory_policy') {
+                val = editValue === 'deny' ? 'Deny' : 'Continue';
+            }
+            descriptions.push(`${fieldLabel} (${methodLabel}): "${val}"`);
+        }
+    } else if (fieldToEdit === 'published') {
+        const statusLabel = editValue === 'true' ? 'Hidden' : 'Visible';
+        descriptions.push(`Set ${fieldLabel} to "${statusLabel}"`);
     } else {
         let mainDescription = "";
         const methodLabels: any = {
@@ -187,6 +260,10 @@ export function getTaskDescriptionList(config: any, shopCurrency: string = "$"):
     }
 
     return descriptions;
+}
+
+function DescriptionsSetStatus(descriptions: string[], editValue: string) {
+    descriptions.push(`Set status to "${editValue || 'Active'}"`);
 }
 
 export function getAppliesToText(config: any): string {

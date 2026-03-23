@@ -24,7 +24,7 @@ import {
 } from "./email.server";
 import { getTaskDescriptionList, getAppliesToText } from "../utils/task-descriptions";
 import { createStagedUpload, uploadJsonl, runBulkMutation, runBulkQuery } from "./bulk-operation.server";
-import { applyRulesToVariant, applyRounding } from "../utils/rule-engine";
+import { applyRulesToVariant, applyRounding, applyTextEdit } from "../utils/rule-engine";
 
 const BULK_THRESHOLD = 100; // Switch to Bulk API for > 100 updates
 
@@ -528,33 +528,7 @@ async function sendJobCompletionEmail(job: any, outcome: "completed" | "failed")
     }
 }
 
-// applyRounding is now in rule-engine.ts
-
-// Helper for Text Edits (Vendor, Product Type, Tags)
-function applyTextEdit(originalText: string, method: string, inputs: { value?: string, findText?: string, replaceText?: string, prefixValue?: string, suffixValue?: string }) {
-    const original = originalText || "";
-    switch (method) {
-        case 'fixed':
-        case 'set_value':
-        case 'set_vendor':
-        case 'set_type':
-            return inputs.value || "";
-        case 'clear_value':
-        case 'clear_vendor':
-        case 'clear_type':
-            return "";
-        case 'add_prefix':
-            return (inputs.prefixValue || "") + original;
-        case 'add_suffix':
-            return original + (inputs.suffixValue || "");
-        case 'find_replace':
-        case 'replace_text':
-            if (!inputs.findText) return original;
-            return original.split(inputs.findText).join(inputs.replaceText || "");
-        default:
-            return original;
-    }
-}
+// applyRounding and applyTextEdit are now in rule-engine.ts
 
 /**
  * Persists detailed item-level results to the task_run_items table for backend analytics.
@@ -600,8 +574,29 @@ function getProductQueryFields(fieldToEdit: string, config: any, isBulk = false)
     if (fieldToEdit === 'status') queryFields += ' status';
     if (fieldToEdit === 'vendor') queryFields += ' vendor';
     if (fieldToEdit === 'product_type') queryFields += ' productType';
+    if (fieldToEdit === 'body_html') queryFields += ' bodyHtml';
+    if (fieldToEdit === 'handle') queryFields += ' handle';
+    if (fieldToEdit === 'template_suffix') queryFields += ' templateSuffix';
+    if (fieldToEdit === 'published') queryFields += ' publishedAt';
+    if (fieldToEdit === 'seo_title' || fieldToEdit === 'seo_description') queryFields += ' seo { title description }';
+    if (fieldToEdit === 'images') queryFields += ' media(first: 20) { edges { node { id mediaContentType ... on MediaImage { image { url } } } } }';
+    if (fieldToEdit === 'option1_name' || fieldToEdit === 'option2_name' || fieldToEdit === 'option3_name') queryFields += ' options { name }';
+    if (fieldToEdit === 'manual_collection') queryFields += ' collections(first: 20) { edges { node { id title } } }';
+    if (fieldToEdit === 'sales_channels' || fieldToEdit === 'market_publishing') {
+        queryFields += `
+            resourcePublicationsV2(first: 50) {
+                edges {
+                    node {
+                        publication { id name }
+                        publishDate
+                        isPublished
+                    }
+                }
+            }
+        `;
+    }
 
-    const needsVariants = ['price', 'compare_price', 'cost', 'inventory', 'weight', 'requires_shipping', 'taxable'].includes(fieldToEdit) ||
+    const needsVariants = ['price', 'compare_price', 'cost', 'inventory', 'weight', 'requires_shipping', 'taxable', 'sku', 'barcode', 'inventory_policy', 'weight_unit', 'hs_code', 'country_of_origin', 'inventory_quantity'].includes(fieldToEdit) ||
         (fieldToEdit === 'metafield' && config.metafieldTargetType === 'variant') ||
         (config.applyToVariants === 'conditions');
 
@@ -618,6 +613,8 @@ function getProductQueryFields(fieldToEdit: string, config: any, isBulk = false)
                         compareAtPrice
                         inventoryQuantity
                         sku
+                        barcode
+                        inventoryPolicy
                         taxable
                         selectedOptions { name value }
                         inventoryItem {
@@ -639,6 +636,8 @@ function getProductQueryFields(fieldToEdit: string, config: any, isBulk = false)
                             requiresShipping
                             tracked
                             ${fieldToEdit === 'cost' ? 'unitCost { amount }' : ''}
+                            hsCode
+                            countryCodeOfOrigin
                         }
                         ${fieldToEdit === 'metafield' && config.metafieldTargetType === 'variant' ?
                 `metafields(first: ${isBulk ? 100 : 10}) {
@@ -658,10 +657,12 @@ function getProductQueryFields(fieldToEdit: string, config: any, isBulk = false)
          `;
     }
 
-    if (fieldToEdit === 'metafield') {
+    if (fieldToEdit === 'metafield' || fieldToEdit.startsWith('google_') || ['age_group', 'gender', 'color', 'size', 'material', 'pattern', 'condition', 'mpn', 'brand'].includes(fieldToEdit)) {
         const limitTag = isBulk ? "(first: 100)" : "(first: 10)";
+        const isGoogleField = fieldToEdit.startsWith('google_') || ['age_group', 'gender', 'color', 'size', 'material', 'pattern', 'condition', 'mpn', 'brand'].includes(fieldToEdit);
+        const googleFilter = isGoogleField ? `(first: 20, namespace: "mm-google-shopping")` : limitTag;
         queryFields += `
-            metafields${limitTag} {
+            metafields${googleFilter} {
                 edges {
                     node {
                         namespace
@@ -796,18 +797,30 @@ export async function processBulkQueryResult(job: any, url: string) {
                 console.error(`[Job ${job.jobId}] Metafield definition sync failed:`, e);
             }
         }
-
         const metafieldOwners = new Set<string>();
         const allPotentialOwners = new Map<string, { title: string, image: string | null }>();
 
         // We need to keep track of the "current" product because variants follow it
         let currentProduct: any = null;
-        let manualMetafieldDeleteRows: string[] = []; // ID
+        let manualMetafieldDeleteRows: { ownerId: string, namespace: string, key: string }[] = [];
         let manualInventoryRows: { inventoryItemId: string, quantity: number, locationIds: string[] }[] = [];
+        let manualActivateRows: { inventoryItemId: string, locationId: string }[] = [];
         const variantIdToCalculatedQty = new Map<string, number>();
         const itemToVariant = new Map<string, string>();
         const itemToLocations = new Map<string, string[]>();
         const itemToTracked = new Map<string, boolean>();
+        const manualCollectionAddRows: string[] = [];
+        const manualCollectionRemoveRows: string[] = [];
+        const manualDeleteProductRows: string[] = [];
+        const manualDeleteVariantRows: string[] = [];
+        const publishRows: Map<string, string[]> = new Map(); // publicationId -> [productIds]
+        const unpublishRows: Map<string, string[]> = new Map(); // publicationId -> [productIds]
+        const imageAddRows: Map<string, string> = new Map(); // productId -> imageUrl
+        const imageSetRows: Map<string, string> = new Map(); // productId -> imageUrl
+        const imageClearRows: string[] = [];
+        const addVariantRows: Map<string, any> = new Map(); // productId -> variantData
+        const addOptionRows: Map<string, any> = new Map(); // productId -> optionData
+        const sortVariantRows: Map<string, string[]> = new Map(); // productId -> newOrderIds
         const itemToLocationQty = new Map<string, Map<string, number>>();
 
         // Pre-process for inventory data (Bulk API connection lines are separate)
@@ -929,8 +942,49 @@ export async function processBulkQueryResult(job: any, url: string) {
 
                         }
 
-                        if (fieldToEdit === 'vendor' || fieldToEdit === 'product_type') {
-                            const originalVal = fieldToEdit === 'vendor' ? raw.vendor : raw.productType;
+                        if (fieldToEdit === 'published') {
+                            const isPublished = raw.publishedAt !== null;
+                            const targetPublished = config.editValue === 'false';
+
+                            if (isPublished !== targetPublished) {
+                                const update: any = { id: raw.id, publishedAt: targetPublished ? new Date().toISOString() : null };
+                                jsonlMutationRows.push({ input: update });
+                                totalCount++;
+
+                                if (!originalData[raw.id]) originalData[raw.id] = {};
+                                originalData[raw.id].publishedAt = raw.publishedAt;
+                                originalData[raw.id].title = raw.title;
+                                originalData[raw.id].image = raw.featuredImage?.url;
+
+                                if (previewItems.length < 50) {
+                                    previewItems.push({
+                                        _v: 2,
+                                        isProductUpdate: true,
+                                        title: raw.title,
+                                        image: raw.featuredImage?.url || null,
+                                        original: isPublished ? "Visible" : "Hidden",
+                                        updated: targetPublished ? "Visible" : "Hidden",
+                                        status: 'pending'
+                                    });
+                                }
+                            }
+                        }
+
+                        const productTextFields = ['vendor', 'product_type', 'title', 'body_html', 'handle', 'template_suffix', 'seo_title', 'seo_description', 'option1_name', 'option2_name', 'option3_name'];
+                        if (productTextFields.includes(fieldToEdit)) {
+                            let originalVal = '';
+                            if (fieldToEdit === 'vendor') originalVal = raw.vendor;
+                            else if (fieldToEdit === 'product_type') originalVal = raw.productType;
+                            else if (fieldToEdit === 'title') originalVal = raw.title;
+                            else if (fieldToEdit === 'body_html') originalVal = raw.bodyHtml;
+                            else if (fieldToEdit === 'handle') originalVal = raw.handle;
+                            else if (fieldToEdit === 'template_suffix') originalVal = raw.templateSuffix;
+                            else if (fieldToEdit === 'seo_title') originalVal = raw.seo?.title || "";
+                            else if (fieldToEdit === 'seo_description') originalVal = raw.seo?.description || "";
+                            else if (fieldToEdit === 'option1_name') originalVal = raw.options?.[0]?.name || "";
+                            else if (fieldToEdit === 'option2_name') originalVal = raw.options?.[1]?.name || "";
+                            else if (fieldToEdit === 'option3_name') originalVal = raw.options?.[2]?.name || "";
+                            
                             const inputs = {
                                 value: config.editValue,
                                 findText: config.findText,
@@ -938,19 +992,32 @@ export async function processBulkQueryResult(job: any, url: string) {
                                 prefixValue: config.editValue,
                                 suffixValue: config.editValue
                             };
-                            const newVal = applyTextEdit(originalVal, config.editMethod, inputs);
+                            const newVal = applyTextEdit(originalVal || "", config.editMethod, inputs);
 
                             if (newVal !== originalVal || config.editMethod.startsWith('clear_')) {
                                 const updateObj: any = { id: raw.id };
                                 if (fieldToEdit === 'vendor') updateObj.vendor = newVal;
-                                else updateObj.productType = newVal;
+                                else if (fieldToEdit === 'product_type') updateObj.productType = newVal;
+                                else if (fieldToEdit === 'title') updateObj.title = newVal;
+                                else if (fieldToEdit === 'body_html') updateObj.bodyHtml = newVal;
+                                else if (fieldToEdit === 'handle') updateObj.handle = newVal;
+                                else if (fieldToEdit === 'template_suffix') updateObj.templateSuffix = newVal;
+                                else if (fieldToEdit === 'seo_title') updateObj.seo = { ...updateObj.seo, title: newVal };
+                                else if (fieldToEdit === 'seo_description') updateObj.seo = { ...updateObj.seo, description: newVal };
+                                else if (fieldToEdit === 'option1_name' || fieldToEdit === 'option2_name' || fieldToEdit === 'option3_name') {
+                                    const opts = raw.options || [];
+                                    const index = fieldToEdit === 'option1_name' ? 0 : (fieldToEdit === 'option2_name' ? 1 : 2);
+                                    const newOpts = [...opts.map((o: any) => o.name)];
+                                    while (newOpts.length <= index) newOpts.push(`Option ${newOpts.length + 1}`);
+                                    newOpts[index] = newVal;
+                                    updateObj.options = newOpts;
+                                }
 
                                 jsonlMutationRows.push({ input: updateObj });
                                 totalCount++;
 
                                 if (!originalData[raw.id]) originalData[raw.id] = {};
-                                originalData[raw.id].vendor = raw.vendor;
-                                originalData[raw.id].productType = raw.productType;
+                                originalData[raw.id][fieldToEdit] = originalVal;
                                 originalData[raw.id].title = raw.title;
                                 originalData[raw.id].image = raw.featuredImage?.url;
 
@@ -968,8 +1035,191 @@ export async function processBulkQueryResult(job: any, url: string) {
                         }
                     }
 
+                    if (fieldToEdit === 'manual_collection') {
+                        const currentCollections = (raw.collections?.edges || []).map((e: any) => e.node.id);
+                        const targetCollectionId = config.editValue; // Expecting a collection GID
+                        
+                        if (config.editMethod === 'add_to_collection') {
+                            if (!currentCollections.includes(targetCollectionId)) {
+                                manualCollectionAddRows.push(raw.id);
+                                totalCount++;
+                            }
+                        } else if (config.editMethod === 'remove_from_collection') {
+                            if (currentCollections.includes(targetCollectionId)) {
+                                manualCollectionRemoveRows.push(raw.id);
+                                totalCount++;
+                            }
+                        }
+
+                        if (!originalData[raw.id]) originalData[raw.id] = {};
+                        originalData[raw.id].manual_collection = currentCollections;
+                        originalData[raw.id].title = raw.title;
+                        originalData[raw.id].image = raw.featuredImage?.url;
+
+                        if (previewItems.length < 50) {
+                            previewItems.push({
+                                isProductUpdate: true,
+                                title: raw.title,
+                                image: raw.featuredImage?.url,
+                                original: "Current items",
+                                updated: config.editMethod === 'add_to_collection' ? "Add to selected" : "Remove from selected",
+                                status: 'pending'
+                            });
+                        }
+                    }
+
+                    if (fieldToEdit === 'delete_products') {
+                        manualDeleteProductRows.push(raw.id);
+                        totalCount++;
+                        if (!originalData[raw.id]) originalData[raw.id] = {};
+                        originalData[raw.id].delete_product = true;
+                        originalData[raw.id].title = raw.title;
+                        originalData[raw.id].image = raw.featuredImage?.url;
+                        if (previewItems.length < 50) {
+                            previewItems.push({
+                                isProductUpdate: true,
+                                title: raw.title,
+                                image: raw.featuredImage?.url,
+                                original: "Exists",
+                                updated: "DELETE",
+                                status: 'pending'
+                            });
+                        }
+                    }
+
+                    if (fieldToEdit === 'sales_channels' || fieldToEdit === 'market_publishing') {
+                        const targetPubId = config.editValue; // Expecting publication GID
+                        const currentPubs = (raw.resourcePublicationsV2?.edges || []).filter((e: any) => e.node.isPublished).map((e: any) => e.node.publication.id);
+                        
+                        if (config.editMethod === 'publish') {
+                            if (!currentPubs.includes(targetPubId)) {
+                                if (!publishRows.has(targetPubId)) publishRows.set(targetPubId, []);
+                                publishRows.get(targetPubId)!.push(raw.id);
+                                totalCount++;
+                            }
+                        } else if (config.editMethod === 'unpublish') {
+                            if (currentPubs.includes(targetPubId)) {
+                                if (!unpublishRows.has(targetPubId)) unpublishRows.set(targetPubId, []);
+                                unpublishRows.get(targetPubId)!.push(raw.id);
+                                totalCount++;
+                            }
+                        }
+
+                        if (!originalData[raw.id]) originalData[raw.id] = {};
+                        originalData[raw.id][fieldToEdit] = currentPubs;
+                        originalData[raw.id].title = raw.title;
+                        originalData[raw.id].image = raw.featuredImage?.url;
+
+                        if (previewItems.length < 50) {
+                            previewItems.push({
+                                isProductUpdate: true,
+                                title: raw.title,
+                                image: raw.featuredImage?.url,
+                                original: "Current visibility",
+                                updated: config.editMethod === 'publish' ? "PUBLISH" : "UNPUBLISH",
+                                status: 'pending'
+                            });
+                        }
+                    }
+
+                    if (fieldToEdit === 'images') {
+                        const newImgUrl = config.editValue;
+                        const currentMedia = (raw.media?.edges || []).map((e: any) => ({
+                            id: e.node.id,
+                            type: e.node.mediaContentType,
+                            url: e.node.image?.url
+                        }));
+
+                        if (config.editMethod === 'add_image') {
+                            if (newImgUrl) {
+                                imageAddRows.set(raw.id, newImgUrl);
+                                totalCount++;
+                            }
+                        } else if (config.editMethod === 'set_image') {
+                            if (newImgUrl) {
+                                imageSetRows.set(raw.id, newImgUrl);
+                                totalCount++;
+                            }
+                        } else if (config.editMethod === 'clear_images') {
+                            if (currentMedia.length > 0) {
+                                imageClearRows.push(raw.id);
+                                totalCount++;
+                            }
+                        }
+
+                        if (!originalData[raw.id]) originalData[raw.id] = {};
+                        originalData[raw.id].images = currentMedia;
+                        originalData[raw.id].title = raw.title;
+                        originalData[raw.id].image = raw.featuredImage?.url;
+
+                        if (previewItems.length < 50) {
+                            previewItems.push({
+                                isProductUpdate: true,
+                                title: raw.title,
+                                image: raw.featuredImage?.url,
+                                original: `${currentMedia.length} images`,
+                                updated: config.editMethod === 'clear_images' ? "CLEAR" : "UPDATE",
+                                status: 'pending'
+                            });
+                        }
+                    }
+
+                    if (fieldToEdit === 'variant_management') {
+                        if (config.editMethod === 'add_variant') {
+                            const [title, price, sku, opt1, opt2, opt3] = (config.editValue || "").split(";");
+                            if (title) {
+                                addVariantRows.set(raw.id, {
+                                    title,
+                                    price: price || "0.00",
+                                    sku: sku || "",
+                                    options: [opt1, opt2, opt3].filter(o => !!o)
+                                });
+                                totalCount++;
+                            }
+                        } else if (config.editMethod === 'sort_variants') {
+                            const variantIds = (raw.variants?.edges || []).map((e: any) => e.node.id);
+                            const sortedIds = [...variantIds].reverse(); 
+                            sortVariantRows.set(raw.id, sortedIds);
+                            totalCount++;
+                        }
+
+                        if (!originalData[raw.id]) originalData[raw.id] = {};
+                        originalData[raw.id].variants_before = (raw.variants?.edges || []).map((e: any) => e.node.id);
+                        originalData[raw.id].title = raw.title;
+                        originalData[raw.id].image = raw.featuredImage?.url;
+                        if (previewItems.length < 50) {
+                            previewItems.push({
+                                isProductUpdate: true,
+                                title: raw.title,
+                                image: raw.featuredImage?.url,
+                                original: `${(raw.variants?.edges || []).length} variants`,
+                                updated: config.editMethod === 'add_variant' ? "ADD_VARIANT" : "REORDER",
+                                status: 'pending'
+                            });
+                        }
+                    } else if (config.editMethod === 'add_option') {
+                        const [name, valuesStr] = (config.editValue || "").split(";");
+                        if (name) {
+                            addOptionRows.set(raw.id, { name, values: valuesStr?.split(",") || [] });
+                            totalCount++;
+                        }
+                        if (!originalData[raw.id]) originalData[raw.id] = {};
+                        originalData[raw.id].title = raw.title;
+                        originalData[raw.id].image = raw.featuredImage?.url;
+                        if (previewItems.length < 50) {
+                            previewItems.push({
+                                isProductUpdate: true,
+                                title: raw.title,
+                                image: raw.featuredImage?.url,
+                                original: "N/A",
+                                updated: "ADD_OPTION",
+                                status: 'pending'
+                            });
+                        }
+                    }
+
                     // Track potential metafield owners
-                    if (fieldToEdit === 'metafield' && config.metafieldTargetType === 'product') {
+                    if ((fieldToEdit === 'metafield' || fieldToEdit.startsWith('google_')) && config.metafieldTargetType === 'product') {
                         allPotentialOwners.set(raw.id, {
                             title: raw.title,
                             image: raw.featuredImage?.url || null
@@ -978,7 +1228,7 @@ export async function processBulkQueryResult(job: any, url: string) {
                 } else {
                     // It's a child (Variant or Metafield)
                     if (raw.id?.includes("ProductVariant")) {
-                        if (fieldToEdit === 'metafield' && config.metafieldTargetType === 'variant') {
+                        if ((fieldToEdit === 'metafield' || fieldToEdit.startsWith('google_')) && config.metafieldTargetType === 'variant') {
                             allPotentialOwners.set(raw.id, {
                                 title: `${currentProduct?.title || "Product"} - ${raw.title}`,
                                 image: currentProduct?.featuredImage?.url || null
@@ -1055,6 +1305,8 @@ export async function processBulkQueryResult(job: any, url: string) {
                                     });
 
                                     variantIdToCalculatedQty.set(raw.id, result.updatedInventory);
+                                } else if (fieldToEdit === 'delete_variants') {
+                                    manualDeleteVariantRows.push(raw.id);
                                 } else if (fieldToEdit === 'cost') {
                                     mutationInput.inventoryItemId = raw.inventoryItem?.id;
                                     mutationInput.cost = result.updatedValue;
@@ -1068,8 +1320,37 @@ export async function processBulkQueryResult(job: any, url: string) {
                                     mutationInput.inventoryItem = {
                                         measurement: { weight: { value: result.updatedWeight, unit: targetUnit } }
                                     };
+                                } else if (fieldToEdit === 'sku') {
+                                    mutationInput.sku = result.updatedValue;
+                                } else if (fieldToEdit === 'barcode') {
+                                    mutationInput.barcode = result.updatedValue;
+                                } else if (fieldToEdit === 'inventory_policy') {
+                                    mutationInput.inventoryPolicy = result.updatedValue.toUpperCase();
+                                } else if (fieldToEdit === 'hs_code') {
+                                    mutationInput.inventoryItem = { hsCode: result.updatedValue };
+                                } else if (fieldToEdit === 'country_of_origin') {
+                                    mutationInput.inventoryItem = { countryCodeOfOrigin: result.updatedValue };
+                                } else if (fieldToEdit === 'weight_unit') {
+                                    const unitMap: any = { "kg": "KILOGRAMS", "g": "GRAMS", "lb": "POUNDS", "oz": "OUNCES" };
+                                    const targetUnit = unitMap[result.updatedValue.toLowerCase()] || result.updatedValue.toUpperCase();
+                                    mutationInput.inventoryItem = {
+                                        measurement: { weight: { unit: targetUnit } }
+                                    };
+                                } else if (fieldToEdit === 'inventory_quantity') {
+                                    manualInventoryRows.push({
+                                        inventoryItemId: raw.inventoryItem?.id,
+                                        quantity: result.updatedInventory,
+                                        locationIds: effectiveLocationId ? [effectiveLocationId] : []
+                                    });
+                                } else if (fieldToEdit === 'connect_locations') {
+                                    if (raw.inventoryItem?.id && effectiveLocationId) {
+                                        manualActivateRows.push({
+                                            inventoryItemId: raw.inventoryItem.id,
+                                            locationId: effectiveLocationId
+                                        });
+                                    }
                                 }
-                                if (fieldToEdit !== 'inventory') {
+                                if (fieldToEdit !== 'inventory' && fieldToEdit !== 'inventory_quantity') {
                                     jsonlMutationRows.push({ input: mutationInput });
                                 }
                                 totalCount++;
@@ -1088,6 +1369,11 @@ export async function processBulkQueryResult(job: any, url: string) {
                                 requiresShipping: raw.inventoryItem?.requiresShipping,
                                 taxable: raw.taxable,
                                 sku: raw.sku,
+                                barcode: raw.barcode,
+                                inventory_policy: raw.inventoryPolicy,
+                                hs_code: raw.inventoryItem?.hsCode,
+                                country_of_origin: raw.inventoryItem?.countryCodeOfOrigin,
+                                weight_unit: raw.inventoryItem?.measurement?.weight?.unit,
                                 title: raw.title
                             };
 
@@ -1104,9 +1390,14 @@ export async function processBulkQueryResult(job: any, url: string) {
                         }
                     }
 
-                    if (fieldToEdit === 'metafield' && raw.id?.includes("Metafield")) {
-                        const namespace = config.metafieldNamespace;
-                        const key = config.metafieldKey;
+                    if ((fieldToEdit === 'metafield' || fieldToEdit.startsWith('google_')) && raw.id?.includes("Metafield")) {
+                        let namespace = config.metafieldNamespace;
+                        let key = config.metafieldKey;
+
+                        if (fieldToEdit.startsWith('google_')) {
+                            namespace = 'mm-google-shopping';
+                            key = fieldToEdit === 'google_product_category' ? 'google_product_category' : fieldToEdit.replace('google_', '');
+                        }
 
                         if (raw.namespace === namespace && raw.key === key) {
                             const existingValue = raw.value;
@@ -1178,9 +1469,15 @@ export async function processBulkQueryResult(job: any, url: string) {
 
         console.log(`[Job ${job.jobId}] Streaming complete. Generated ${jsonlMutationRows.length} updates. Metafield Owners: ${metafieldOwners.size}`);
 
-        if (fieldToEdit === 'metafield') {
-            const namespace = config.metafieldNamespace;
-            const key = config.metafieldKey;
+        if (fieldToEdit === 'metafield' || fieldToEdit.startsWith('google_')) {
+            let namespace = config.metafieldNamespace;
+            let key = config.metafieldKey;
+            
+            if (fieldToEdit.startsWith('google_')) {
+                namespace = 'mm-google-shopping';
+                key = fieldToEdit === 'google_product_category' ? 'google_product_category' : fieldToEdit.replace('google_', '');
+            }
+
             const type = config.metafieldType || "single_line_text_field";
             const editMethod = config.editMethod;
             const editValue = config.editValue;
@@ -1251,10 +1548,10 @@ export async function processBulkQueryResult(job: any, url: string) {
         let manualMarketRows: any[] = marketRows;
         let manualProductUpdateRows: any[] = [];
 
-        if (jsonlMutationRows.length > 0 || manualMetafieldDeleteRows.length > 0 || manualInventoryRows.length > 0) {
+        if (jsonlMutationRows.length > 0 || manualMetafieldDeleteRows.length > 0 || manualInventoryRows.length > 0 || manualActivateRows.length > 0) {
 
             if (standardRows.length > 0) {
-                if (['price', 'compare_price', 'weight', 'requires_shipping', 'taxable'].includes(fieldToEdit)) {
+                if (['price', 'compare_price', 'weight', 'weight_unit', 'requires_shipping', 'taxable', 'sku', 'barcode', 'inventory_policy', 'hs_code', 'country_of_origin'].includes(fieldToEdit)) {
                     const variantRows = standardRows.filter(r => r.input?.id?.includes("ProductVariant"));
                     const productRows = standardRows.filter(r => r.input?.id?.includes("Product/"));
                     manualProductUpdateRows = productRows;
@@ -1269,6 +1566,10 @@ export async function processBulkQueryResult(job: any, url: string) {
                         if (r.input.compareAtPrice !== undefined) variantInput.compareAtPrice = r.input.compareAtPrice;
                         if (r.input.inventoryItem !== undefined) variantInput.inventoryItem = r.input.inventoryItem;
                         if (r.input.taxable !== undefined) variantInput.taxable = r.input.taxable;
+                        if (r.input.sku !== undefined) variantInput.sku = r.input.sku;
+                        if (r.input.barcode !== undefined) variantInput.barcode = r.input.barcode;
+                        if (r.input.inventoryPolicy !== undefined) variantInput.inventoryPolicy = r.input.inventoryPolicy;
+                        if (r.input.inventoryItem !== undefined) variantInput.inventoryItem = r.input.inventoryItem;
                         byProduct[pid].push(variantInput);
                     });
 
@@ -1282,7 +1583,7 @@ export async function processBulkQueryResult(job: any, url: string) {
                         }`;
                         finalRows = Object.entries(byProduct).map(([productId, variants]) => ({ productId, variants }));
                     }
-                } else if (['status', 'tags', 'vendor', 'product_type'].includes(fieldToEdit)) {
+                } else if (['status', 'tags', 'vendor', 'product_type', 'title', 'body_html', 'handle', 'template_suffix', 'published', 'seo_title', 'seo_description'].includes(fieldToEdit)) {
                     mutation = `mutation($input: ProductInput!) {
                         productUpdate(input: $input) {
                             product { id }
@@ -1303,27 +1604,89 @@ export async function processBulkQueryResult(job: any, url: string) {
                         }
                     }`;
                     finalRows = standardRows.map(r => ({ id: r.input.inventoryItemId, input: { cost: r.input.cost } }));
-                } else if (fieldToEdit === 'metafield') {
+                } else if (fieldToEdit === 'metafield' || fieldToEdit.startsWith('google_')) {
                     if (config.editMethod === 'clear_value') {
                         // Deletions utilize manualMetafieldDeleteRows and are processed manually below
                         mutation = "";
                         finalRows = [];
                     } else {
-                        mutation = `mutation bulkSetMetafields($input: MetafieldsSetInput!) {
+                    // --- POST-PROCESSING: Handle missing metafields (New Creation) ---
+                    if (fieldToEdit === 'metafield' || fieldToEdit.startsWith('google_')) {
+                        let ns = config.metafieldNamespace;
+                        let k = config.metafieldKey;
+                        if (fieldToEdit.startsWith('google_')) {
+                            ns = 'mm-google-shopping';
+                            k = fieldToEdit === 'google_product_category' ? 'google_product_category' : fieldToEdit.replace('google_', '');
+                        }
+
+                        for (const [ownerId, info] of allPotentialOwners.entries()) {
+                            if (!metafieldOwners.has(ownerId)) {
+                                const inputs = {
+                                    value: config.editValue,
+                                    findText: config.findText,
+                                    replaceText: config.replaceText,
+                                    prefixValue: config.editValue,
+                                    suffixValue: config.editValue
+                                };
+                                const newVal = applyTextEdit("", config.editMethod, inputs);
+
+                                if (newVal && config.editMethod !== 'clear_value') {
+                                    standardRows.push({
+                                        input: {
+                                            ownerId: ownerId,
+                                            value: newVal,
+                                            type: config.metafieldType || "single_line_text_field"
+                                        }
+                                    });
+                                    totalCount++;
+
+                                    if (!originalData[ownerId]) originalData[ownerId] = {};
+                                    originalData[ownerId].metafield = {
+                                        id: null,
+                                        value: null,
+                                        type: config.metafieldType || "single_line_text_field",
+                                        namespace: ns,
+                                        key: k
+                                    };
+
+                                    if (previewItems.length < 50) {
+                                        previewItems.push({
+                                            _v: 2,
+                                            title: info.title,
+                                            image: info.image,
+                                            original: "(None)",
+                                            updated: newVal,
+                                            status: 'pending'
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    mutation = `mutation bulkSetMetafields($input: MetafieldsSetInput!) {
                                 metafieldsSet(metafields: [$input]) {
                                     metafields { id }
                                     userErrors { field message }
                                 }
                             }`;
-                        finalRows = standardRows.map(r => ({
-                            input: {
-                                ownerId: r.input.ownerId,
-                                namespace: config.metafieldNamespace,
-                                key: config.metafieldKey,
-                                value: r.input.value,
-                                type: r.input.type || "single_line_text_field"
+                        finalRows = standardRows.map(r => {
+                            let ns = config.metafieldNamespace;
+                            let k = config.metafieldKey;
+                            if (fieldToEdit.startsWith('google_')) {
+                                ns = 'mm-google-shopping';
+                                k = fieldToEdit === 'google_product_category' ? 'google_product_category' : fieldToEdit.replace('google_', '');
                             }
-                        }));
+                            return {
+                                input: {
+                                    ownerId: r.input.ownerId,
+                                    namespace: ns,
+                                    key: k,
+                                    value: r.input.value,
+                                    type: r.input.type || "single_line_text_field"
+                                }
+                            };
+                        });
                     }
                 }
             } else if (marketRows.length > 0) {
@@ -1343,6 +1706,48 @@ export async function processBulkQueryResult(job: any, url: string) {
             }
 
             console.log(`[Job ${job.jobId}] Generated ${finalRows.length} rows for mutation.`);
+
+            if (addVariantRows.size > 0) {
+                console.log(`[Job ${job.jobId}] Creating variants for ${addVariantRows.size} products...`);
+                for (const [pid, vdata] of addVariantRows.entries()) {
+                    await shopifyAdmin.graphql(`
+                        mutation productVariantCreate($input: ProductVariantInput!) {
+                            productVariantCreate(input: $input) {
+                                productVariant { id }
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { input: { productId: pid, ...vdata } } });
+                }
+            }
+
+            if (sortVariantRows.size > 0) {
+                console.log(`[Job ${job.jobId}] Reordering variants for ${sortVariantRows.size} products...`);
+                for (const [pid, vids] of sortVariantRows.entries()) {
+                    await shopifyAdmin.graphql(`
+                        mutation productVariantsBulkReorder($productId: ID!, $positions: [ProductVariantPositionInput!]!) {
+                            productVariantsBulkReorder(productId: $productId, positions: $positions) {
+                                product { id }
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { productId: pid, positions: vids.map((id, index) => ({ id, position: index + 1 })) } });
+                }
+            }
+
+            if (addOptionRows.size > 0) {
+                console.log(`[Job ${job.jobId}] Adding options to ${addOptionRows.size} products...`);
+                for (const [pid, data] of addOptionRows.entries()) {
+                    const { name, values } = data;
+                    await shopifyAdmin.graphql(`
+                        mutation productOptionsCreate($productId: ID!, $options: [OptionCreateInput!]!) {
+                            productOptionsCreate(productId: $productId, options: $options) {
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { productId: pid, options: [{ name, values: values.map((v: string) => ({ name: v })) }] } });
+                }
+            }
 
             if (mutation && finalRows.length > 0) {
                 console.log(`[Job ${job.jobId}] Creating Staged Upload...`);
@@ -1503,6 +1908,164 @@ export async function processBulkQueryResult(job: any, url: string) {
                         }
                     });
                     return;
+                }
+            }
+
+            if (manualCollectionAddRows.length > 0) {
+                console.log(`[Job ${job.jobId}] Adding ${manualCollectionAddRows.length} products to collection ${config.editValue}...`);
+                const BATCH_SIZE = 250;
+                for (let i = 0; i < manualCollectionAddRows.length; i += BATCH_SIZE) {
+                    const chunk = manualCollectionAddRows.slice(i, i + BATCH_SIZE);
+                    await shopifyAdmin.graphql(`
+                        mutation collectionAddProducts($id: ID!, $productIds: [ID!]!) {
+                            collectionAddProducts(id: $id, productIds: $productIds) {
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { id: config.editValue, productIds: chunk } });
+                }
+            }
+
+            if (manualCollectionRemoveRows.length > 0) {
+                console.log(`[Job ${job.jobId}] Removing ${manualCollectionRemoveRows.length} products from collection ${config.editValue}...`);
+                const BATCH_SIZE = 250;
+                for (let i = 0; i < manualCollectionRemoveRows.length; i += BATCH_SIZE) {
+                    const chunk = manualCollectionRemoveRows.slice(i, i + BATCH_SIZE);
+                    await shopifyAdmin.graphql(`
+                        mutation collectionRemoveProducts($id: ID!, $productIds: [ID!]!) {
+                            collectionRemoveProducts(id: $id, productIds: $productIds) {
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { id: config.editValue, productIds: chunk } });
+                }
+            }
+
+            if (manualDeleteProductRows.length > 0) {
+                console.log(`[Job ${job.jobId}] Deleting ${manualDeleteProductRows.length} products...`);
+                for (const pid of manualDeleteProductRows) {
+                    await shopifyAdmin.graphql(`
+                        mutation productDelete($input: ProductDeleteInput!) {
+                            productDelete(input: $input) {
+                                deletedProductId
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { input: { id: pid } } });
+                }
+            }
+
+            if (manualDeleteVariantRows.length > 0) {
+                console.log(`[Job ${job.jobId}] Deleting ${manualDeleteVariantRows.length} variants...`);
+                for (const vid of manualDeleteVariantRows) {
+                    await shopifyAdmin.graphql(`
+                        mutation productVariantDelete($id: ID!) {
+                            productVariantDelete(id: $id) {
+                                deletedProductVariantId
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { id: vid } });
+                }
+            }
+
+            if (manualActivateRows.length > 0) {
+                console.log(`[Job ${job.jobId}] Processing ${manualActivateRows.length} inventory activations...`);
+                // Process in parallel with concurrency control
+                const CONCURRENCY = 10;
+                for (let i = 0; i < manualActivateRows.length; i += CONCURRENCY) {
+                    const chunk = manualActivateRows.slice(i, i + CONCURRENCY);
+                    await Promise.all(chunk.map(async (act) => {
+                        try {
+                            await shopifyAdmin.graphql(
+                                `mutation inventoryActivate($inventoryItemId: ID!, $locationId: ID!) {
+                                    inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) {
+                                        inventoryLevel { id }
+                                        userErrors { field message }
+                                    }
+                                }`,
+                                { variables: { inventoryItemId: act.inventoryItemId, locationId: act.locationId } }
+                            );
+                        } catch (e) {
+                            console.error(`[Job ${job.jobId}] Activation failed:`, e);
+                        }
+                    }));
+                }
+            }
+
+            if (publishRows.size > 0) {
+                for (const [pubId, pids] of publishRows.entries()) {
+                    console.log(`[Job ${job.jobId}] Publishing ${pids.length} products to ${pubId}...`);
+                    for (const pid of pids) {
+                        await shopifyAdmin.graphql(`
+                            mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
+                                publishablePublish(id: $id, input: $input) {
+                                    userErrors { field message }
+                                }
+                            }
+                        `, { variables: { id: pid, input: [{ publicationId: pubId }] } });
+                    }
+                }
+            }
+
+            if (unpublishRows.size > 0) {
+                for (const [pubId, pids] of unpublishRows.entries()) {
+                    console.log(`[Job ${job.jobId}] Unpublishing ${pids.length} products from ${pubId}...`);
+                    for (const pid of pids) {
+                        await shopifyAdmin.graphql(`
+                            mutation publishableUnpublish($id: ID!, $input: [PublicationInput!]!) {
+                                publishableUnpublish(id: $id, input: $input) {
+                                    userErrors { field message }
+                                }
+                            }
+                        `, { variables: { id: pid, input: [{ publicationId: pubId }] } });
+                    }
+                }
+            }
+
+            if (imageAddRows.size > 0) {
+                console.log(`[Job ${job.jobId}] Adding images to ${imageAddRows.size} products...`);
+                for (const [pid, url] of imageAddRows.entries()) {
+                    await shopifyAdmin.graphql(`
+                        mutation productCreateMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+                            productCreateMedia(productId: $productId, media: $media) {
+                                media { id }
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { productId: pid, media: [{ alt: "Product Image", mediaContentType: "IMAGE", originalSource: url }] } });
+                }
+            }
+
+            if (imageSetRows.size > 0) {
+                console.log(`[Job ${job.jobId}] Setting image for ${imageSetRows.size} products (Replaces existing)...`);
+                for (const [pid, url] of imageSetRows.entries()) {
+                    // To "Set" we first clear (optional) or use productUpdate which replaces if we don't have existing IDs.
+                    // Actually, productUpdate with media but no IDs replaces ALL.
+                    await shopifyAdmin.graphql(`
+                        mutation productUpdate($input: ProductInput!) {
+                            productUpdate(input: $input) {
+                                product { id }
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { input: { id: pid, media: [{ alt: "Featured Image", mediaContentType: "IMAGE", originalSource: url }] } } });
+                }
+            }
+
+            if (imageClearRows.length > 0) {
+                console.log(`[Job ${job.jobId}] Clearing all images for ${imageClearRows.length} products...`);
+                // For clear, we need to know existing media IDs. 
+                // We'll use the productUpdate with empty media array if possible, or productDeleteMedia.
+                for (const pid of imageClearRows) {
+                    await shopifyAdmin.graphql(`
+                        mutation productUpdate($input: ProductInput!) {
+                            productUpdate(input: $input) {
+                                product { id }
+                                userErrors { field message }
+                            }
+                        }
+                    `, { variables: { input: { id: pid, media: [] } } });
                 }
             }
 
@@ -1906,9 +2469,19 @@ export async function runJob(job: any) {
                 previewItems.push(item);
             }
 
-            // --- VENDOR & PRODUCT TYPE UPDATE LOGIC ---
-            if (fieldToEdit === 'vendor' || fieldToEdit === 'product_type') {
-                const originalVal = fieldToEdit === 'vendor' ? product.vendor : product.productType;
+            // --- PRODUCT TEXT FIELDS UPDATE LOGIC ---
+            const productTextFields = ['vendor', 'product_type', 'title', 'body_html', 'handle', 'template_suffix', 'seo_title', 'seo_description'];
+            if (productTextFields.includes(fieldToEdit)) {
+                let originalVal = '';
+                if (fieldToEdit === 'vendor') originalVal = product.vendor;
+                else if (fieldToEdit === 'product_type') originalVal = product.productType;
+                else if (fieldToEdit === 'title') originalVal = product.title;
+                else if (fieldToEdit === 'body_html') originalVal = product.bodyHtml;
+                else if (fieldToEdit === 'handle') originalVal = product.handle;
+                else if (fieldToEdit === 'template_suffix') originalVal = product.templateSuffix;
+                else if (fieldToEdit === 'seo_title') originalVal = product.seo?.title || "";
+                else if (fieldToEdit === 'seo_description') originalVal = product.seo?.description || "";
+
                 const inputs = {
                     value: config.editValue,
                     findText: config.findText,
@@ -1916,7 +2489,7 @@ export async function runJob(job: any) {
                     prefixValue: config.editValue,
                     suffixValue: config.editValue
                 };
-                const newVal = applyTextEdit(originalVal, editMethod, inputs);
+                const newVal = applyTextEdit(originalVal || "", editMethod, inputs);
 
                 if (newVal !== originalVal || editMethod.startsWith('clear_')) {
                     const updateObj: any = {
@@ -1925,17 +2498,19 @@ export async function runJob(job: any) {
                         logOriginal: originalVal,
                         logNew: newVal
                     };
-                    if (fieldToEdit === 'vendor') {
-                        updateObj.vendor = newVal;
-                    } else {
-                        updateObj.productType = newVal;
-                    }
+                    if (fieldToEdit === 'vendor') updateObj.vendor = newVal;
+                    else if (fieldToEdit === 'product_type') updateObj.productType = newVal;
+                    else if (fieldToEdit === 'title') updateObj.title = newVal;
+                    else if (fieldToEdit === 'body_html') updateObj.bodyHtml = newVal;
+                    else if (fieldToEdit === 'handle') updateObj.handle = newVal;
+                    else if (fieldToEdit === 'template_suffix') updateObj.templateSuffix = newVal;
+                    else if (fieldToEdit === 'seo_title') updateObj.seo = { title: newVal };
+                    else if (fieldToEdit === 'seo_description') updateObj.seo = { description: newVal };
 
                     updates.push(updateObj);
 
                     if (!originalData[product.id]) originalData[product.id] = {};
-                    if (fieldToEdit === 'vendor') originalData[product.id].vendor = originalVal;
-                    else originalData[product.id].productType = originalVal;
+                    originalData[product.id][fieldToEdit] = originalVal;
 
                     if (previewItems.length < 100) {
                         previewItems.push({
@@ -1956,11 +2531,36 @@ export async function runJob(job: any) {
                 }
             }
 
+            // --- PUBLISHED STATUS UPDATE LOGIC ---
+            if (fieldToEdit === 'published') {
+                const isPublished = product.publishedAt !== null;
+                const targetPublished = config.editValue === 'false';
+                
+                if (isPublished !== targetPublished) {
+                    updates.push({
+                        id: product.id,
+                        title: product.title,
+                        logOriginal: isPublished ? "Visible" : "Hidden",
+                        logNew: targetPublished ? "Visible" : "Hidden",
+                        publishedAt: targetPublished ? new Date().toISOString() : null
+                    });
+
+                    if (!originalData[product.id]) originalData[product.id] = {};
+                    originalData[product.id].publishedAt = product.publishedAt;
+                }
+            }
+
             // --- METAFIELD UPDATE LOGIC ---
-            if (fieldToEdit === 'metafield') {
+            if (fieldToEdit === 'metafield' || fieldToEdit.startsWith('google_')) {
                 const targetType = config.metafieldTargetType || 'product'; // "product" or "variant"
-                const namespace = config.metafieldNamespace;
-                const key = config.metafieldKey;
+                let namespace = config.metafieldNamespace;
+                let key = config.metafieldKey;
+
+                if (fieldToEdit.startsWith('google_')) {
+                    namespace = 'mm-google-shopping';
+                    key = fieldToEdit === 'google_product_category' ? 'google_product_category' : fieldToEdit.replace('google_', '');
+                }
+
                 const type = config.metafieldType || "single_line_text_field";
 
                 // Auto-create metafield definition with API access for new metafields
@@ -2047,14 +2647,17 @@ export async function runJob(job: any) {
                     if (!originalData[target.id]) {
                         originalData[target.id] = {};
                     }
+                    const existingType = existingEdge ? existingEdge.node.type : null;
+                    const finalType = existingType || config.metafieldType || "single_line_text_field";
+
                     // Store detailed info including namespace/key to allow recreating/nulling properly
-                    originalData[target.id].metafield = existingEdge ? {
-                        id: existingEdge.node.id,
-                        value: existingEdge.node.value,
-                        type: existingEdge.node.type,
+                    originalData[target.id].metafield = {
+                        id: existingEdge ? existingEdge.node.id : null,
+                        value: existingEdge ? existingEdge.node.value : null,
+                        type: finalType,
                         namespace: namespace,
                         key: key
-                    } : null; // null means it didn't exist
+                    };
 
                     // Calculate New Value
                     let newValue = existingValue;
@@ -2089,13 +2692,13 @@ export async function runJob(job: any) {
                         // Default / Fixed logic
                         newValue = editValue;
                         // Normalize boolean if applicable
-                        if (type === 'boolean') {
+                        if (finalType === 'boolean') {
                             newValue = (editValue === 'false' || editMethod === 'fixed_false') ? 'false' : 'true';
                         }
                     }
 
                     // For integers, ensure rounding
-                    if (type && type?.includes('integer') && newValue !== null) {
+                    if (finalType && finalType?.includes('integer') && newValue !== null) {
                         const parsed = parseFloat(newValue);
                         if (!isNaN(parsed)) {
                             newValue = Math.round(parsed).toString();
@@ -2110,12 +2713,12 @@ export async function runJob(job: any) {
                             title: targetType === 'variant' ? `${product.title} - ${target.title}` : product.title,
                             logOriginal: existingValue,
                             logNew: newValue,
-                            metadata: { namespace, key, type },
+                            metadata: { namespace, key, type: finalType },
                             metafields: [
                                 {
                                     namespace,
                                     key,
-                                    type,
+                                    type: finalType,
                                     value: newValue
                                 }
                             ]
@@ -2361,7 +2964,10 @@ export async function runJob(job: any) {
                         weight: variant.inventoryItem?.measurement?.weight?.value,
                         weightUnit: variant.inventoryItem?.measurement?.weight?.unit,
                         requiresShipping: variant.inventoryItem?.requiresShipping,
-                        taxable: variant.taxable
+                        taxable: variant.taxable,
+                        sku: variant.sku,
+                        barcode: variant.barcode,
+                        inventoryPolicy: variant.inventoryPolicy
                     };
 
                     let update: any = {
@@ -2382,7 +2988,9 @@ export async function runJob(job: any) {
                             cost: variant.inventoryItem?.unitCost?.amount,
                             weight: variant.inventoryItem?.measurement?.weight?.value,
                             weightUnit: variant.inventoryItem?.measurement?.weight?.unit,
-                            requiresShipping: variant.inventoryItem?.requiresShipping
+                            requiresShipping: variant.inventoryItem?.requiresShipping,
+                            barcode: variant.barcode,
+                            inventoryPolicy: variant.inventoryPolicy
                         },
                         config
                     );
@@ -2443,13 +3051,36 @@ export async function runJob(job: any) {
                     } else if (fieldToEdit === 'taxable') {
                         update.taxable = editValue === 'true';
                         console.log(`[DEBUG] taxable update for variant ${variant.id}:`, JSON.stringify(update));
+                    } else if (['sku', 'barcode', 'inventory_policy'].includes(fieldToEdit)) {
+                        let originalVal = '';
+                        if (fieldToEdit === 'sku') originalVal = variant.sku || "";
+                        if (fieldToEdit === 'barcode') originalVal = variant.barcode || "";
+                        if (fieldToEdit === 'inventory_policy') originalVal = variant.inventoryPolicy || "DENY";
+
+                        const inputs = {
+                            value: editValue,
+                            findText: config.findText,
+                            replaceText: config.replaceText,
+                            prefixValue: editValue,
+                            suffixValue: editValue
+                        };
+                        const newVal = applyTextEdit(originalVal, config.editMethod, inputs);
+                        
+                        if (newVal !== originalVal || config.editMethod.startsWith('clear_')) {
+                            if (fieldToEdit === 'sku') update.sku = newVal;
+                            if (fieldToEdit === 'barcode') update.barcode = newVal;
+                            if (fieldToEdit === 'inventory_policy') update.inventoryPolicy = newVal.toUpperCase();
+                            
+                            ruleResult.originalValue = originalVal;
+                            ruleResult.updatedValue = newVal;
+                        }
                     }
 
                     update.logOriginal = ruleResult.originalValue;
                     update.logNew = ruleResult.updatedValue;
 
-                    // Always push requires_shipping, taxable, and INVENTORY updates, regardless of market settings
-                    if (fieldToEdit === 'requires_shipping' || fieldToEdit === 'taxable' || fieldToEdit === 'inventory') {
+                    // Always push standard properties regardless of market settings
+                    if (['requires_shipping', 'taxable', 'inventory', 'sku', 'barcode', 'inventory_policy'].includes(fieldToEdit)) {
                         if (Object.keys(update).length > 3) {
                             updates.push(update);
                             console.log(`[DEBUG] Pushed ${fieldToEdit} update to array. Total updates: ${updates.length}`);
@@ -3239,14 +3870,31 @@ export async function revertJob(job: any) {
         let costUpdates: any[] = [];
         let metafieldUpdates: any[] = [];
         let variantFlatUpdates: any[] = []; // For bulk variant mutation
+        let collectionAddRevert: Map<string, string[]> = new Map(); // CollectionId -> [ProductIds]
+        let collectionRemoveRevert: Map<string, string[]> = new Map(); // CollectionId -> [ProductIds]
+        let publishRevert: Map<string, string[]> = new Map(); // PublicationId -> [ProductIds]
+        let unpublishRevert: Map<string, string[]> = new Map(); // PublicationId -> [ProductIds]
+        let imageRevertRows: Map<string, any[]> = new Map(); // ProductId -> [MediaInput]
+        let sortVariantRevert: Map<string, string[]> = new Map(); // ProductId -> [originalVids]
 
         // 1. Sort ALL entries into logical batches ONCE (NO internal fetches)
         for (const [id, data] of entries) {
             if (data.metafield !== undefined) {
                 metafieldUpdates.push({ id, data: data.metafield });
             }
-            if (data.status || data.tags || data.vendor || data.productType) {
+            if (data.status !== undefined || data.tags !== undefined || data.vendor !== undefined || data.productType !== undefined || data.title !== undefined || data.body_html !== undefined || data.handle !== undefined || data.template_suffix !== undefined || data.publishedAt !== undefined || data.seo_title !== undefined || data.seo_description !== undefined || data.manual_collection !== undefined) {
                 productUpdates.push({ id, data });
+            }
+            if (data.images !== undefined) {
+                // Restore original media list
+                const mediaInputs = (data.images || []).map((m: any) => ({
+                    id: m.id
+                }));
+                imageRevertRows.set(id, mediaInputs);
+            }
+
+            if (data.variants_before !== undefined && job.configuration?.editMethod === 'sort_variants') {
+                sortVariantRevert.set(id, data.variants_before);
             }
             if (data.inventoryQuantity !== undefined && data.inventoryItemId) {
                 const targetLocId = data.locationId || defaultLocationId;
@@ -3263,22 +3911,62 @@ export async function revertJob(job: any) {
             if (data.cost !== undefined && data.inventoryItemId) {
                 costUpdates.push({ id: data.inventoryItemId, cost: data.cost });
             }
-            if (data.price !== undefined || data.weight !== undefined || data.requiresShipping !== undefined || data.taxable !== undefined) {
-                const productId = data.productId; // Use pre-cached productId
 
-                const vInput: any = { id };
-                if (data.price !== undefined) vInput.price = data.price.toString();
-                if (data.compareAtPrice !== undefined) vInput.compareAtPrice = data.compareAtPrice !== null ? data.compareAtPrice.toString() : null;
+            if (data.manual_collection !== undefined) {
+                const targetCollId = job.configuration?.editValue;
+                if (targetCollId) {
+                    if (job.configuration?.editMethod === 'add_to_collection') {
+                        if (!collectionRemoveRevert.has(targetCollId)) collectionRemoveRevert.set(targetCollId, []);
+                        collectionRemoveRevert.get(targetCollId)!.push(id);
+                    } else if (job.configuration?.editMethod === 'remove_from_collection') {
+                        if (!collectionAddRevert.has(targetCollId)) collectionAddRevert.set(targetCollId, []);
+                        collectionAddRevert.get(targetCollId)!.push(id);
+                    }
+                }
+            }
 
-                if (data.weight !== undefined) {
-                    const unitMap: any = { "kg": "KILOGRAMS", "g": "GRAMS", "lb": "POUNDS", "oz": "OUNCES" };
-                    vInput.inventoryItem = { measurement: { weight: { unit: unitMap[data.weightUnit || "kg"] || "KILOGRAMS", value: Number(data.weight) } } };
+            if (data.sales_channels !== undefined || data.market_publishing !== undefined) {
+                const targetPubId = job.configuration?.editValue;
+                const fieldKey = data.sales_channels !== undefined ? 'sales_channels' : 'market_publishing';
+                if (targetPubId) {
+                    const wasPublished = data[fieldKey].includes(targetPubId);
+                    if (job.configuration?.editMethod === 'publish') {
+                        // If we published it, we should unpublish it now
+                        if (!unpublishRevert.has(targetPubId)) unpublishRevert.set(targetPubId, []);
+                        unpublishRevert.get(targetPubId)!.push(id);
+                    } else if (job.configuration?.editMethod === 'unpublish') {
+                        // If we unpublished it, we should publish it now
+                        if (!publishRevert.has(targetPubId)) publishRevert.set(targetPubId, []);
+                        publishRevert.get(targetPubId)!.push(id);
+                    }
                 }
-                if (data.requiresShipping !== undefined) {
-                    if (!vInput.inventoryItem) vInput.inventoryItem = {};
-                    vInput.inventoryItem.requiresShipping = data.requiresShipping;
-                }
-                if (data.taxable !== undefined) vInput.taxable = data.taxable;
+            }
+
+            if (data.price !== undefined || data.weight !== undefined || data.requiresShipping !== undefined || data.taxable !== undefined || data.sku !== undefined || data.barcode !== undefined || data.inventory_policy !== undefined || data.hs_code !== undefined || data.country_of_origin !== undefined || data.weight_unit !== undefined) {
+                    const productId = data.productId; // Use pre-cached productId
+
+                    const vInput: any = { id };
+                    if (data.price !== undefined) vInput.price = data.price.toString();
+                    if (data.compareAtPrice !== undefined) vInput.compareAtPrice = data.compareAtPrice !== null ? data.compareAtPrice.toString() : null;
+
+                    if (data.sku !== undefined) vInput.sku = data.sku;
+                    if (data.barcode !== undefined) vInput.barcode = data.barcode;
+                    if (data.inventory_policy !== undefined) vInput.inventoryPolicy = data.inventory_policy;
+                    if (data.hs_code !== undefined || data.country_of_origin !== undefined) {
+                        if (!vInput.inventoryItem) vInput.inventoryItem = {};
+                        if (data.hs_code !== undefined) vInput.inventoryItem.hsCode = data.hs_code;
+                        if (data.country_of_origin !== undefined) vInput.inventoryItem.countryCodeOfOrigin = data.country_of_origin;
+                    }
+
+                    if (data.weight !== undefined) {
+                        const unitMap: any = { "kg": "KILOGRAMS", "g": "GRAMS", "lb": "POUNDS", "oz": "OUNCES" };
+                        vInput.inventoryItem = { measurement: { weight: { unit: unitMap[data.weightUnit || "kg"] || "KILOGRAMS", value: Number(data.weight) } } };
+                    }
+                    if (data.requiresShipping !== undefined) {
+                        if (!vInput.inventoryItem) vInput.inventoryItem = {};
+                        vInput.inventoryItem.requiresShipping = data.requiresShipping;
+                    }
+                    if (data.taxable !== undefined) vInput.taxable = data.taxable;
 
                 if (productId) {
                     if (!variantUpdatesByProduct[productId]) variantUpdatesByProduct[productId] = [];
@@ -3334,6 +4022,17 @@ export async function revertJob(job: any) {
                         if (p.data.tags) input.tags = p.data.tags;
                         if (p.data.vendor) input.vendor = p.data.vendor;
                         if (p.data.productType) input.productType = p.data.productType;
+                        if (p.data.title) input.title = p.data.title;
+                        if (p.data.body_html) input.bodyHtml = p.data.body_html;
+                        if (p.data.handle) input.handle = p.data.handle;
+                        if (p.data.template_suffix) input.templateSuffix = p.data.template_suffix;
+                        if (p.data.publishedAt !== undefined) input.publishedAt = p.data.publishedAt;
+                        if (p.data.seo_title || p.data.seo_description) {
+                            input.seo = {
+                                title: p.data.seo_title || undefined,
+                                description: p.data.seo_description || undefined
+                            };
+                        }
                         return { input };
                     });
                     productUpdates = []; // Handled by bulk
@@ -3369,12 +4068,104 @@ export async function revertJob(job: any) {
                         userErrors { field message }
                     }
                 }`;
-                    // Remove 'id' field from metafield data as it's not part of MetafieldsSetInput
-                    jsonlRows = metafieldUpdates.map(m => {
+                    // Only process metafields that have values (deletions are handled manually)
+                    const updatesWithValues = metafieldUpdates.filter(m => m.data.value !== null);
+                    const updatesWithNulls = metafieldUpdates.filter(m => m.data.value === null);
+
+                    jsonlRows = updatesWithValues.map(m => {
                         const { id, ...metafieldData } = m.data;
                         return { metafields: [{ ownerId: m.id, ...metafieldData }] };
                     });
-                    metafieldUpdates = []; // Handled by bulk
+                    
+                    metafieldUpdates = updatesWithNulls; // Handled by manual path for deletion
+                }
+
+                if (collectionAddRevert.size > 0) {
+                    for (const [collId, pids] of collectionAddRevert.entries()) {
+                        const BATCH_SIZE = 250;
+                        for (let j = 0; j < pids.length; j += BATCH_SIZE) {
+                            const chunk = pids.slice(j, j + BATCH_SIZE);
+                            await shopifyAdmin.graphql(`
+                                mutation collectionAddProducts($id: ID!, $productIds: [ID!]!) {
+                                    collectionAddProducts(id: $id, productIds: $productIds) {
+                                        userErrors { field message }
+                                    }
+                                }
+                            `, { variables: { id: collId, productIds: chunk } });
+                        }
+                    }
+                }
+
+                if (collectionRemoveRevert.size > 0) {
+                    for (const [collId, pids] of collectionRemoveRevert.entries()) {
+                        const BATCH_SIZE = 250;
+                        for (let j = 0; j < pids.length; j += BATCH_SIZE) {
+                            const chunk = pids.slice(j, j + BATCH_SIZE);
+                            await shopifyAdmin.graphql(`
+                                mutation collectionRemoveProducts($id: ID!, $productIds: [ID!]!) {
+                                    collectionRemoveProducts(id: $id, productIds: $productIds) {
+                                        userErrors { field message }
+                                    }
+                                }
+                            `, { variables: { id: collId, productIds: chunk } });
+                        }
+                    }
+                }
+
+                if (publishRevert.size > 0) {
+                    for (const [pubId, pids] of publishRevert.entries()) {
+                        for (const pid of pids) {
+                            await shopifyAdmin.graphql(`
+                                mutation publishablePublish($id: ID!, $input: [PublicationInput!]!) {
+                                    publishablePublish(id: $id, input: $input) {
+                                        userErrors { field message }
+                                    }
+                                }
+                            `, { variables: { id: pid, input: [{ publicationId: pubId }] } });
+                        }
+                    }
+                }
+
+                if (unpublishRevert.size > 0) {
+                    for (const [pubId, pids] of unpublishRevert.entries()) {
+                        for (const pid of pids) {
+                            await shopifyAdmin.graphql(`
+                                mutation publishableUnpublish($id: ID!, $input: [PublicationInput!]!) {
+                                    publishableUnpublish(id: $id, input: $input) {
+                                        userErrors { field message }
+                                    }
+                                }
+                            `, { variables: { id: pid, input: [{ publicationId: pubId }] } });
+                        }
+                    }
+                }
+
+                if (imageRevertRows.size > 0) {
+                    console.log(`[Job ${job.jobId}] Reverting images for ${imageRevertRows.size} products...`);
+                    for (const [pid, media] of imageRevertRows.entries()) {
+                        await shopifyAdmin.graphql(`
+                            mutation productUpdate($input: ProductInput!) {
+                                productUpdate(input: $input) {
+                                    product { id }
+                                    userErrors { field message }
+                                }
+                            }
+                        `, { variables: { input: { id: pid, media } } });
+                    }
+                }
+
+                if (sortVariantRevert.size > 0) {
+                    console.log(`[Job ${job.jobId}] Reverting variant order for ${sortVariantRevert.size} products...`);
+                    for (const [pid, vids] of sortVariantRevert.entries()) {
+                        await shopifyAdmin.graphql(`
+                            mutation productVariantsBulkReorder($productId: ID!, $positions: [ProductVariantPositionInput!]!) {
+                                productVariantsBulkReorder(productId: $productId, positions: $positions) {
+                                    product { id }
+                                    userErrors { field message }
+                                }
+                            }
+                        `, { variables: { productId: pid, positions: vids.map((vid, index) => ({ id: vid, position: index + 1 })) } });
+                    }
                 }
 
                 if (mutation && jsonlRows.length > 0) {
@@ -3502,38 +4293,73 @@ export async function revertJob(job: any) {
             const chunk = remainingBatch.slice(i, i + CONCURRENCY);
             await Promise.all(chunk.map(async (item: any) => {
                 try {
-                    if (item.data?.status || item.data?.tags || item.data?.vendor || item.data?.productType) {
+                    if (item.data?.status !== undefined || item.data?.tags !== undefined || item.data?.vendor !== undefined || item.data?.productType !== undefined || item.data?.title !== undefined || item.data?.body_html !== undefined || item.data?.handle !== undefined || item.data?.template_suffix !== undefined || item.data?.publishedAt !== undefined || item.data?.seo_title !== undefined || item.data?.seo_description !== undefined) {
                         const input: any = { id: item.id };
-                        if (item.data.status) input.status = item.data.status.toUpperCase();
-                        if (item.data.tags) {
-                            // Ensure tags are an array (could be a string from older tasks)
+                        if (item.data.status !== undefined) input.status = item.data.status.toUpperCase();
+                        if (item.data.tags !== undefined) {
                             input.tags = Array.isArray(item.data.tags) ? item.data.tags :
                                 (typeof item.data.tags === 'string' ? item.data.tags.split(",").map((t: any) => t.trim()).filter(Boolean) : []);
                         }
                         if (item.data.vendor !== undefined) input.vendor = item.data.vendor;
                         if (item.data.productType !== undefined) input.productType = item.data.productType;
+                        if (item.data.title !== undefined) input.title = item.data.title;
+                        if (item.data.body_html !== undefined) input.bodyHtml = item.data.body_html;
+                        if (item.data.handle !== undefined) input.handle = item.data.handle;
+                        if (item.data.template_suffix !== undefined) input.templateSuffix = item.data.template_suffix;
+                        if (item.data.publishedAt !== undefined) input.publishedAt = item.data.publishedAt;
+                        if (item.data.seo_title !== undefined || item.data.seo_description !== undefined) {
+                            input.seo = {
+                                title: item.data.seo_title !== undefined ? item.data.seo_title : undefined,
+                                description: item.data.seo_description !== undefined ? item.data.seo_description : undefined
+                            };
+                        }
                         await shopifyAdmin.graphql(
                             `mutation productUpdate($input: ProductInput!) { productUpdate(input: $input) { userErrors { field message } } }`,
                             { variables: { input } }
                         );
                     } else if (item.data?.namespace) {
-                        // Remove 'id' field as it's not part of MetafieldsSetInput
-                        const { id, ...metafieldData } = item.data;
-                        const metafieldInput = { ownerId: item.id, ...metafieldData };
-                        console.log(`[Job ${job.jobId}] Reverting metafield for ${item.id}:`, JSON.stringify(metafieldInput, null, 2));
-                        const response = await shopifyAdmin.graphql(
-                            `mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
-                                metafieldsSet(metafields: $metafields) { 
-                                    metafields { id namespace key value }
-                                    userErrors { field message } 
+                        // Check if we need to DELETE or SET
+                        if (item.data.value === null) {
+                            console.log(`[Job ${job.jobId}] Reverting metafield (DELETING) for ${item.id}: ${item.data.namespace}.${item.data.key}`);
+                            const response = await shopifyAdmin.graphql(
+                                `mutation metafieldsDelete($metafields: [MetafieldIdentifierInput!]!) { 
+                                    metafieldsDelete(metafields: $metafields) { 
+                                        deletedMetafields { ownerId namespace key } 
+                                        userErrors { field message } 
+                                    } 
+                                }`,
+                                { 
+                                    variables: { 
+                                        metafields: [{
+                                            ownerId: item.id,
+                                            namespace: item.data.namespace,
+                                            key: item.data.key
+                                        }] 
+                                    } 
                                 }
-                            }`,
-                            { variables: { metafields: [metafieldInput] } }
-                        );
-                        const responseJson = await response.json() as any;
-                        console.log(`[Job ${job.jobId}] Metafield revert response:`, JSON.stringify(responseJson, null, 2));
-                        if (responseJson.data?.metafieldsSet?.userErrors?.length > 0) {
-                            console.error(`[Job ${job.jobId}] Metafield revert errors:`, responseJson.data.metafieldsSet.userErrors);
+                            );
+                            const responseJson = await response.json() as any;
+                            if (responseJson.data?.metafieldsDelete?.userErrors?.length > 0) {
+                                console.error(`[Job ${job.jobId}] Metafield revert (delete) errors:`, responseJson.data.metafieldsDelete.userErrors);
+                            }
+                        } else {
+                            // Remove 'id' field as it's not part of MetafieldsSetInput
+                            const { id, ...metafieldData } = item.data;
+                            const metafieldInput = { ownerId: item.id, ...metafieldData };
+                            console.log(`[Job ${job.jobId}] Reverting metafield (SETTING) for ${item.id}:`, JSON.stringify(metafieldInput, null, 2));
+                            const response = await shopifyAdmin.graphql(
+                                `mutation metafieldsSet($metafields: [MetafieldsSetInput!]!) {
+                                    metafieldsSet(metafields: $metafields) { 
+                                        metafields { id namespace key value }
+                                        userErrors { field message } 
+                                    }
+                                }`,
+                                { variables: { metafields: [metafieldInput] } }
+                            );
+                            const responseJson = await response.json() as any;
+                            if (responseJson.data?.metafieldsSet?.userErrors?.length > 0) {
+                                console.error(`[Job ${job.jobId}] Metafield revert (set) errors:`, responseJson.data.metafieldsSet.userErrors);
+                            }
                         }
                     } else if (item.cost !== undefined) {
                         await shopifyAdmin.graphql(
