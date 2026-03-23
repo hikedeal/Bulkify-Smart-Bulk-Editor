@@ -2,7 +2,7 @@
 
 client_id = "0d4ef57f7dbd01aab7960d39459af0c2"
 name = "Bulkify: Smart Bulk Editor"
-application_url = "https://your-app-url.com"
+application_url = "https://bulkify.co"
 embedded = true
 
 [build]
@@ -13,9 +13,13 @@ api_version = "2026-01"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = ""
+scopes = "write_products,read_markets,read_locations,write_inventory,write_markets"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ ]
+redirect_urls = [
+  "https://bulkify.co/auth/callback",
+  "https://bulkify.co/auth/shopify/callback",
+  "https://bulkify.co/api/auth/callback"
+]
